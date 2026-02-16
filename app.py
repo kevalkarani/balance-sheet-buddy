@@ -279,11 +279,37 @@ def main():
                         classification_df = outputs.parse_claude_table_response(classification_result)
 
                         # If parsing was successful, merge with trial balance data
-                        if not classification_df.empty:
+                        if not classification_df.empty and 'Status' in classification_df.columns:
                             st.write(f"✓ Parsed {len(classification_df)} accounts from Claude response")
                         else:
-                            st.write("⚠️ Using trial balance data with basic classification")
+                            st.write("⚠️ Claude response not in table format - using trial balance with inferred status")
+                            # Use trial balance and infer basic status
                             classification_df = tb_merged.copy()
+
+                            # Infer basic PASS/MISMATCH based on balance type
+                            def infer_status(row):
+                                category = str(row.get('Category', '')).lower()
+                                balance_type = 'Debit' if row['Debit'] > 0 else 'Credit' if row['Credit'] > 0 else 'Zero'
+
+                                # Basic validation rules
+                                if 'asset' in category and 'contra' not in category:
+                                    return 'PASS' if balance_type == 'Debit' else 'MISMATCH'
+                                elif 'liability' in category or 'equity' in category:
+                                    return 'PASS' if balance_type == 'Credit' else 'MISMATCH'
+                                elif 'clearing' in category:
+                                    return 'PASS' if balance_type == 'Zero' else 'MISMATCH'
+                                else:
+                                    return 'PASS'  # Default for unmapped
+
+                            classification_df['Status'] = classification_df.apply(infer_status, axis=1)
+                            classification_df['Balance_Type'] = classification_df.apply(
+                                lambda row: 'Debit' if row['Debit'] > 0 else 'Credit' if row['Credit'] > 0 else 'Zero',
+                                axis=1
+                            )
+                            classification_df['Amount'] = classification_df.apply(
+                                lambda row: row['Debit'] if row['Debit'] > 0 else row['Credit'],
+                                axis=1
+                            )
 
                         # Generate Excel
                         excel_output = outputs.create_classification_excel(classification_result, tb_merged)
@@ -390,11 +416,11 @@ def main():
                                 return ['background-color: #f8d7da'] * len(row)
                         return [''] * len(row)
 
-                    # Display with styling - no height limit to show all rows
+                    # Display with styling - large height to show many rows
                     st.dataframe(
                         display_df.style.apply(highlight_status, axis=1),
                         use_container_width=True,
-                        height=None  # Show all rows
+                        height=600  # Scrollable table
                     )
                 else:
                     st.info("Classification table could not be parsed. Download Excel file for full results.")
