@@ -87,6 +87,7 @@ def main():
     # Header
     st.title("📊 Balance Sheet Buddy")
     st.markdown("### AI-Powered Balance Sheet Reconciliation")
+    st.caption("🔄 Version: 2024-02-17.2 (Streaming + Status Fix)")
     st.markdown("---")
 
     # Check API key
