@@ -140,6 +140,10 @@ def main():
         )
 
     # Main content area
+    # Debug: Show file status
+    if tb_file:
+        st.write(f"📁 File detected: {tb_file.name} ({tb_file.size:,} bytes)")
+
     if not tb_file:
         # Welcome screen
         st.info("👈 Please upload a Trial Balance file to get started")
