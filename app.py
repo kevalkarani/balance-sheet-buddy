@@ -107,9 +107,14 @@ def main():
         tb_file = st.file_uploader(
             "Upload Trial Balance",
             type=['xlsx', 'xls', 'csv'],
-            help="Excel or CSV file with Account, Debit, and Credit columns",
-            key="tb"
+            help="Excel or CSV file with Account, Debit, and Credit columns"
         )
+
+        # Debug: Show upload status
+        if tb_file is not None:
+            st.success(f"✓ File uploaded: {tb_file.name}")
+        else:
+            st.info("Waiting for file...")
 
         st.markdown("---")
 
@@ -119,8 +124,7 @@ def main():
             "Upload GL dump file(s)",
             type=['xlsx', 'xls', 'csv'],
             accept_multiple_files=True,
-            help="General Ledger transaction details for detailed analysis (Output B & C)",
-            key="gl"
+            help="General Ledger transaction details for detailed analysis (Output B & C)"
         )
 
         st.markdown("---")
