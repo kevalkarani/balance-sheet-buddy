@@ -44,20 +44,25 @@ def check_api_key():
 
 
 def call_claude(prompt: str, api_key: str, max_tokens: int = 16384) -> str:
-    """Call Claude API with the given prompt."""
+    """Call Claude API with the given prompt using streaming for large responses."""
     try:
         client = Anthropic(api_key=api_key)
 
-        response = client.messages.create(
+        # Use streaming for responses that might take a while
+        full_response = ""
+
+        with client.messages.stream(
             model="claude-sonnet-4-5-20250929",
             max_tokens=max_tokens,
             messages=[{
                 "role": "user",
                 "content": prompt
             }]
-        )
+        ) as stream:
+            for text in stream.text_stream:
+                full_response += text
 
-        return response.content[0].text
+        return full_response
 
     except Exception as e:
         st.error(f"Error calling Claude API: {str(e)}")
@@ -255,6 +260,7 @@ def main():
                         estimated_tokens = max(16384, len(tb_merged) * 100 + 2000)
                         estimated_tokens = min(estimated_tokens, 32000)  # Cap at model limit
                         st.write(f"✓ Using {estimated_tokens} max tokens for {len(tb_merged)} accounts")
+                        st.write("⏳ Streaming response from Claude (this may take 30-60 seconds)...")
 
                         classification_result = call_claude(prompt, api_key, max_tokens=estimated_tokens)
 
