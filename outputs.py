@@ -103,14 +103,14 @@ def create_classification_excel(analysis_text: str, tb_df: pd.DataFrame) -> io.B
     - Amount
     - Category
     - Subcategory
-    - Classification commentary
     - Status (PASS or MISMATCH)
+    - Classification commentary
     """
     # Try to parse Claude's response as a table
     result_df = parse_claude_table_response(analysis_text)
 
-    # If parsing failed or incomplete, create from trial balance with basic info
-    if result_df.empty or len(result_df) < len(tb_df):
+    # If parsing failed or incomplete, create from trial balance with inferred status
+    if result_df.empty or len(result_df) < len(tb_df) or 'Status' not in result_df.columns:
         result_df = tb_df.copy()
 
         # Add missing columns
@@ -126,19 +126,47 @@ def create_classification_excel(analysis_text: str, tb_df: pd.DataFrame) -> io.B
                 axis=1
             )
 
-        if 'Commentary' not in result_df.columns:
-            result_df['Commentary'] = 'Analysis pending'
-
+        # Infer Status based on category and balance type
         if 'Status' not in result_df.columns:
-            result_df['Status'] = 'PENDING'
+            def infer_status(row):
+                category = str(row.get('Category', '')).lower()
+                balance_type = row.get('Balance_Type', '')
+
+                # Apply framework rules
+                if 'asset' in category and 'contra' not in category:
+                    return 'PASS' if balance_type == 'Debit' else 'MISMATCH'
+                elif 'liability' in category or 'equity' in category:
+                    return 'PASS' if balance_type == 'Credit' else 'MISMATCH'
+                elif 'clearing' in category:
+                    return 'PASS' if balance_type == 'Zero' else 'MISMATCH'
+                else:
+                    return 'PASS'  # Default for unmapped
+
+            result_df['Status'] = result_df.apply(infer_status, axis=1)
+
+        # Generate commentary based on status
+        if 'Commentary' not in result_df.columns or result_df['Commentary'].str.contains('pending', case=False, na=True).any():
+            def generate_commentary(row):
+                status = row.get('Status', '')
+                category = row.get('Category', '')
+                balance_type = row.get('Balance_Type', '')
+
+                if status == 'PASS':
+                    return f"{category} with {balance_type} balance - Correct"
+                elif status == 'MISMATCH':
+                    return f"{category} with {balance_type} balance - Incorrect (should be opposite)"
+                else:
+                    return f"{category} - Review required"
+
+            result_df['Commentary'] = result_df.apply(generate_commentary, axis=1)
 
     # Ensure all required columns exist
-    required_cols = ['Account', 'Balance_Type', 'Amount', 'Category', 'Subcategory', 'Commentary', 'Status']
+    required_cols = ['Account', 'Balance_Type', 'Amount', 'Category', 'Subcategory', 'Status', 'Commentary']
     for col in required_cols:
         if col not in result_df.columns:
             result_df[col] = ''
 
-    # Reorder columns
+    # Reorder columns - Status comes BEFORE Commentary
     output_df = result_df[required_cols]
 
     # Create Excel file in memory
