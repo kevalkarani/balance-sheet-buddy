@@ -94,16 +94,20 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df[df['Account'].notna()]
     df = df[df['Account'].astype(str).str.strip() != '']
 
-    # Remove rows that look like totals/subtotals (case-insensitive)
-    # More aggressive pattern to catch standalone "Total" rows
-    total_pattern = re.compile(r'^\s*(total|subtotal|sub-total|grand total|sum)\s*$', re.IGNORECASE)
-    df = df[~df['Account'].astype(str).str.match(total_pattern)]
+    # Remove ALL rows that start with "Total" or "Subtotal" (catches subtotal rows like "Total - 11500")
+    # This catches: "Total", "Total - Account Name", "Subtotal", etc.
+    total_start_pattern = re.compile(r'^\s*total[\s\-]', re.IGNORECASE)
+    df = df[~df['Account'].astype(str).str.contains(total_start_pattern, na=False)]
 
-    # Also remove rows where "total" is the main content
-    df = df[~df['Account'].astype(str).str.lower().str.strip().isin(['total', 'subtotal', 'grand total', 'sum'])]
+    # Remove standalone total rows
+    total_exact_pattern = re.compile(r'^\s*(total|subtotal|sub-total|grand total|sum)\s*$', re.IGNORECASE)
+    df = df[~df['Account'].astype(str).str.match(total_exact_pattern)]
 
     # Remove rows where both debit and credit are 0 (likely blank)
     df = df[~((df['Debit'] == 0) & (df['Credit'] == 0))]
+
+    # Also remove "Opening Balance" rows as they're often aggregates
+    df = df[~df['Account'].astype(str).str.contains(r'^\s*opening\s+balance', case=False, na=False)]
 
     return df.reset_index(drop=True)
 
