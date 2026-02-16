@@ -368,7 +368,7 @@ def extract_summary_stats(classification_text: str, df: pd.DataFrame = None) -> 
     return stats
 
 
-def create_summary_text(stats: Dict) -> str:
+def create_summary_text(stats: Dict, df: pd.DataFrame = None) -> str:
     """
     Create a detailed text summary of analysis results.
     """
@@ -396,13 +396,35 @@ def create_summary_text(stats: Dict) -> str:
         total_debit = stats['total_debit']
         total_credit = stats['total_credit']
         balance_diff = abs(total_debit - total_credit)
+        is_balanced = balance_diff < 0.01  # Allow for rounding errors
+
         lines.extend([
-            "💰 BALANCE TOTALS:",
+            "💰 TRIAL BALANCE TOTALS:",
             f"   Total Debits:  ${total_debit:,.2f}",
             f"   Total Credits: ${total_credit:,.2f}",
             f"   Difference:    ${balance_diff:,.2f}",
-            ""
         ])
+
+        if is_balanced:
+            lines.append(f"   ✅ Trial Balance is BALANCED")
+        else:
+            lines.append(f"   ❌ Trial Balance OUT OF BALANCE by ${balance_diff:,.2f}")
+        lines.append("")
+
+    # List mismatched accounts if available
+    if mismatched > 0 and df is not None and 'Status' in df.columns:
+        mismatch_df = df[df['Status'].str.upper() == 'MISMATCH']
+        if not mismatch_df.empty:
+            lines.extend([
+                "⚠️  ACCOUNTS REQUIRING REVIEW:",
+                "-" * 60
+            ])
+            for idx, row in mismatch_df.iterrows():
+                account = row.get('Account', 'Unknown')
+                category = row.get('Category', 'N/A')
+                amount = row.get('Amount', 0)
+                lines.append(f"   • {account} ({category}) - ${amount:,.2f}")
+            lines.append("")
 
     # Add category breakdown if available
     if stats.get('by_category'):

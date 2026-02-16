@@ -346,7 +346,10 @@ def main():
                 st.session_state.classification_result,
                 st.session_state.tb_merged
             )
-            st.markdown(outputs.create_summary_text(stats))
+
+            # Also pass DataFrame to summary for listing mismatched accounts
+            classification_df_for_stats = st.session_state.classification_df if st.session_state.classification_df is not None and not st.session_state.classification_df.empty else st.session_state.tb_merged
+            st.markdown(outputs.create_summary_text(stats, classification_df_for_stats))
 
             st.markdown("---")
 
@@ -384,11 +387,11 @@ def main():
                                 return ['background-color: #f8d7da'] * len(row)
                         return [''] * len(row)
 
-                    # Display with styling
+                    # Display with styling - no height limit to show all rows
                     st.dataframe(
                         display_df.style.apply(highlight_status, axis=1),
                         use_container_width=True,
-                        height=400
+                        height=None  # Show all rows
                     )
                 else:
                     st.info("Classification table could not be parsed. Download Excel file for full results.")
