@@ -13,6 +13,7 @@ from datetime import datetime
 import processor
 import prompts
 import outputs
+import auth
 
 
 # Page configuration
@@ -65,6 +66,10 @@ def call_claude(prompt: str, api_key: str) -> str:
 
 
 def main():
+    # Check authentication first
+    if not auth.check_password():
+        st.stop()
+
     # Initialize session state for persisting results
     if 'analysis_complete' not in st.session_state:
         st.session_state.analysis_complete = False
@@ -89,6 +94,9 @@ def main():
 
     # Sidebar
     with st.sidebar:
+        # Show logout button
+        auth.show_logout_button()
+
         st.header("📁 File Uploads")
 
         # Category Mapping
