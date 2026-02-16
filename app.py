@@ -43,14 +43,14 @@ def check_api_key():
         return None
 
 
-def call_claude(prompt: str, api_key: str) -> str:
+def call_claude(prompt: str, api_key: str, max_tokens: int = 16384) -> str:
     """Call Claude API with the given prompt."""
     try:
         client = Anthropic(api_key=api_key)
 
         response = client.messages.create(
             model="claude-sonnet-4-5-20250929",
-            max_tokens=8192,
+            max_tokens=max_tokens,
             messages=[{
                 "role": "user",
                 "content": prompt
@@ -251,7 +251,12 @@ def main():
                         else:
                             prompt = prompts.generate_output_a_prompt(tb_text)
 
-                        classification_result = call_claude(prompt, api_key)
+                        # Calculate max_tokens based on account count (roughly 100 tokens per account + overhead)
+                        estimated_tokens = max(16384, len(tb_merged) * 100 + 2000)
+                        estimated_tokens = min(estimated_tokens, 32000)  # Cap at model limit
+                        st.write(f"✓ Using {estimated_tokens} max tokens for {len(tb_merged)} accounts")
+
+                        classification_result = call_claude(prompt, api_key, max_tokens=estimated_tokens)
 
                         if classification_result:
                             st.write("✓ Classification analysis complete")

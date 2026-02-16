@@ -430,8 +430,10 @@ def extract_summary_stats(classification_text: str, df: pd.DataFrame = None) -> 
         stats['total_accounts'] = len(df)
 
         if 'Status' in df.columns:
-            stats['pass_count'] = len(df[df['Status'].str.upper() == 'PASS'])
-            stats['mismatch_count'] = len(df[df['Status'].str.upper() == 'MISMATCH'])
+            # Filter out NaN values before counting
+            status_series = df['Status'].dropna().astype(str)
+            stats['pass_count'] = len(status_series[status_series.str.upper() == 'PASS'])
+            stats['mismatch_count'] = len(status_series[status_series.str.upper() == 'MISMATCH'])
 
         if 'Category' in df.columns:
             stats['unmapped_count'] = len(df[df['Category'] == 'Unmapped'])
@@ -443,10 +445,11 @@ def extract_summary_stats(classification_text: str, df: pd.DataFrame = None) -> 
             # Status by category
             for category in df['Category'].unique():
                 cat_df = df[df['Category'] == category]
+                status_series = cat_df['Status'].dropna().astype(str)
                 stats['by_status'][category] = {
                     'total': len(cat_df),
-                    'pass': len(cat_df[cat_df['Status'].str.upper() == 'PASS']),
-                    'mismatch': len(cat_df[cat_df['Status'].str.upper() == 'MISMATCH'])
+                    'pass': len(status_series[status_series.str.upper() == 'PASS']),
+                    'mismatch': len(status_series[status_series.str.upper() == 'MISMATCH'])
                 }
 
         # Calculate totals
