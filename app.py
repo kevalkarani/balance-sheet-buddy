@@ -205,9 +205,14 @@ def main():
     else:
         # Process uploaded files
         st.success("✓ Trial Balance uploaded")
+        st.write("---")
 
-        # Analysis button
-        if st.button("🚀 Analyze Balance Sheet", type="primary", use_container_width=True):
+        # Analysis button - prominently displayed
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            analyze_button = st.button("🚀 Analyze Balance Sheet", type="primary", use_container_width=True)
+
+        if analyze_button:
             with st.spinner("Processing files and performing analysis..."):
 
                 try:
