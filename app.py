@@ -91,27 +91,13 @@ def main():
     with st.sidebar:
         st.header("📁 File Uploads")
 
-        # Category Mapping
-        st.subheader("1. Category Mapping (Optional)")
-        mapping_file = st.file_uploader(
-            "Upload category mapping Excel file",
-            type=['xlsx', 'xls'],
-            help="Excel file with Account, Category, and Subcategory columns. If not provided, accounts will be marked as 'Unmapped'.",
-            key="mapping"
-        )
-
-        # Check for default mapping file
+        # Category Mapping - Always use default (hidden from users)
         default_mapping_path = "Category mapping Balance Sheet.xlsx"
-        use_default_mapping = False
-        if not mapping_file and os.path.exists(default_mapping_path):
-            if st.checkbox("Use default category mapping", value=True):
-                use_default_mapping = True
-                st.success("✓ Using default mapping file")
-
-        st.markdown("---")
+        use_default_mapping = True
+        mapping_file = None  # Users cannot upload custom mapping
 
         # Trial Balance
-        st.subheader("2. Trial Balance (Required)")
+        st.subheader("1. Trial Balance (Required)")
         tb_file = st.file_uploader(
             "Upload Trial Balance",
             type=['xlsx', 'xls', 'csv'],
@@ -122,7 +108,7 @@ def main():
         st.markdown("---")
 
         # GL Dump
-        st.subheader("3. GL Dump (Optional)")
+        st.subheader("2. GL Dump (Optional)")
         gl_files = st.file_uploader(
             "Upload GL dump file(s)",
             type=['xlsx', 'xls', 'csv'],
@@ -311,8 +297,9 @@ def main():
                                 axis=1
                             )
 
-                        # Generate Excel
-                        excel_output = outputs.create_classification_excel(classification_result, tb_merged)
+                        # Generate Excel using the same DataFrame that will be displayed
+                        # This ensures Excel matches what user sees on screen
+                        excel_output = outputs.create_classification_excel_from_df(classification_df)
                         st.write("✓ Excel file created")
                         status.update(label="✓ Classification parsed", state="complete")
 

@@ -208,6 +208,75 @@ def create_classification_excel(analysis_text: str, tb_df: pd.DataFrame) -> io.B
     return output
 
 
+def create_classification_excel_from_df(df: pd.DataFrame) -> io.BytesIO:
+    """
+    Create Excel output directly from the classification DataFrame.
+    This ensures Excel matches exactly what's displayed on screen.
+    """
+    from openpyxl.styles import PatternFill, Font
+
+    # Ensure required columns exist
+    required_cols = ['Account', 'Balance_Type', 'Amount', 'Category', 'Subcategory', 'Status', 'Commentary']
+
+    # Add missing columns if needed
+    if 'Commentary' not in df.columns:
+        def generate_commentary(row):
+            status = row.get('Status', '')
+            category = row.get('Category', '')
+            balance_type = row.get('Balance_Type', '')
+
+            if status == 'PASS':
+                return f"{category} with {balance_type} balance - Correct"
+            elif status == 'MISMATCH':
+                return f"{category} with {balance_type} balance - Should be opposite"
+            else:
+                return f"{category} - Review required"
+
+        df = df.copy()
+        df['Commentary'] = df.apply(generate_commentary, axis=1)
+
+    # Select and order columns
+    output_cols = [col for col in required_cols if col in df.columns]
+    output_df = df[output_cols].copy()
+
+    # Create Excel file
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        output_df.to_excel(writer, index=False, sheet_name='Classification View')
+
+        worksheet = writer.sheets['Classification View']
+
+        # Format headers
+        for cell in worksheet[1]:
+            cell.font = Font(bold=True)
+
+        # Auto-adjust column widths
+        for column in worksheet.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            worksheet.column_dimensions[column_letter].width = adjusted_width
+
+        # Color code Status column
+        status_col_idx = output_cols.index('Status') + 1 if 'Status' in output_cols else None
+        if status_col_idx:
+            for row in range(2, len(output_df) + 2):
+                status_cell = worksheet.cell(row=row, column=status_col_idx)
+                if status_cell.value == 'MISMATCH':
+                    status_cell.fill = PatternFill(start_color='FFCCCC', end_color='FFCCCC', fill_type='solid')
+                elif status_cell.value == 'PASS':
+                    status_cell.fill = PatternFill(start_color='CCFFCC', end_color='CCFFCC', fill_type='solid')
+
+    output.seek(0)
+    return output
+
+
 def format_reconciliation_report(analysis_text: str) -> str:
     """
     Format Output B - Account-Level Reconciliation report as HTML.
