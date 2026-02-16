@@ -275,11 +275,15 @@ def main():
                     with st.status("📋 Parsing classification results...", expanded=True) as status:
                         classification_df = outputs.parse_claude_table_response(classification_result)
 
-                        # If parsing was successful, merge with trial balance data
-                        if not classification_df.empty and 'Status' in classification_df.columns:
+                        # Check if parsing was successful AND Status column has actual values
+                        has_valid_status = (not classification_df.empty and
+                                          'Status' in classification_df.columns and
+                                          classification_df['Status'].notna().any())
+
+                        if has_valid_status:
                             st.write(f"✓ Parsed {len(classification_df)} accounts from Claude response")
                         else:
-                            st.write("⚠️ Claude response not in table format - using trial balance with inferred status")
+                            st.write("⚠️ Claude response not in table format or Status column empty - using trial balance with inferred status")
                             # Use trial balance and infer basic status
                             classification_df = tb_merged.copy()
 
@@ -303,6 +307,18 @@ def main():
                                 lambda row: 'Debit' if row['Debit'] > 0 else 'Credit' if row['Credit'] > 0 else 'Zero',
                                 axis=1
                             )
+                            classification_df['Amount'] = classification_df.apply(
+                                lambda row: row['Debit'] if row['Debit'] > 0 else row['Credit'],
+                                axis=1
+                            )
+
+                        # Ensure required columns exist even if parsed successfully
+                        if 'Balance_Type' not in classification_df.columns:
+                            classification_df['Balance_Type'] = classification_df.apply(
+                                lambda row: 'Debit' if row['Debit'] > 0 else 'Credit' if row['Credit'] > 0 else 'Zero',
+                                axis=1
+                            )
+                        if 'Amount' not in classification_df.columns:
                             classification_df['Amount'] = classification_df.apply(
                                 lambda row: row['Debit'] if row['Debit'] > 0 else row['Credit'],
                                 axis=1
