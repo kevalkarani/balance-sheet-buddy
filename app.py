@@ -1,0 +1,465 @@
+"""
+Balance Sheet Buddy - Web Application
+A Streamlit app for AI-powered balance sheet reconciliation.
+"""
+
+import streamlit as st
+import pandas as pd
+from anthropic import Anthropic
+import os
+from datetime import datetime
+
+# Import our custom modules
+import processor
+import prompts
+import outputs
+
+
+# Page configuration
+st.set_page_config(
+    page_title="Balance Sheet Buddy",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+
+def check_api_key():
+    """Check if Claude API key is configured."""
+    try:
+        api_key = st.secrets["ANTHROPIC_API_KEY"]
+        return api_key
+    except (FileNotFoundError, KeyError):
+        st.error("⚠️ ANTHROPIC_API_KEY not configured. Please add it to Streamlit secrets.")
+        st.info("""
+        **For local development:** Create `.streamlit/secrets.toml` with:
+        ```toml
+        ANTHROPIC_API_KEY = "your-api-key-here"
+        ```
+
+        **For Streamlit Cloud:** Add the API key in App Settings → Secrets
+        """)
+        st.stop()
+        return None
+
+
+def call_claude(prompt: str, api_key: str) -> str:
+    """Call Claude API with the given prompt."""
+    try:
+        client = Anthropic(api_key=api_key)
+
+        response = client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=8192,
+            messages=[{
+                "role": "user",
+                "content": prompt
+            }]
+        )
+
+        return response.content[0].text
+
+    except Exception as e:
+        st.error(f"Error calling Claude API: {str(e)}")
+        return None
+
+
+def main():
+    # Initialize session state for persisting results
+    if 'analysis_complete' not in st.session_state:
+        st.session_state.analysis_complete = False
+    if 'classification_result' not in st.session_state:
+        st.session_state.classification_result = None
+    if 'classification_df' not in st.session_state:
+        st.session_state.classification_df = None
+    if 'excel_output' not in st.session_state:
+        st.session_state.excel_output = None
+    if 'reconciliation_result' not in st.session_state:
+        st.session_state.reconciliation_result = None
+    if 'tb_merged' not in st.session_state:
+        st.session_state.tb_merged = None
+
+    # Header
+    st.title("📊 Balance Sheet Buddy")
+    st.markdown("### AI-Powered Balance Sheet Reconciliation")
+    st.markdown("---")
+
+    # Check API key
+    api_key = check_api_key()
+
+    # Sidebar
+    with st.sidebar:
+        st.header("📁 File Uploads")
+
+        # Category Mapping
+        st.subheader("1. Category Mapping (Optional)")
+        mapping_file = st.file_uploader(
+            "Upload category mapping Excel file",
+            type=['xlsx', 'xls'],
+            help="Excel file with Account, Category, and Subcategory columns. If not provided, accounts will be marked as 'Unmapped'.",
+            key="mapping"
+        )
+
+        # Check for default mapping file
+        default_mapping_path = "Category mapping Balance Sheet.xlsx"
+        use_default_mapping = False
+        if not mapping_file and os.path.exists(default_mapping_path):
+            if st.checkbox("Use default category mapping", value=True):
+                use_default_mapping = True
+                st.success("✓ Using default mapping file")
+
+        st.markdown("---")
+
+        # Trial Balance
+        st.subheader("2. Trial Balance (Required)")
+        tb_file = st.file_uploader(
+            "Upload Trial Balance",
+            type=['xlsx', 'xls', 'csv'],
+            help="Excel or CSV file with Account, Debit, and Credit columns",
+            key="tb"
+        )
+
+        st.markdown("---")
+
+        # GL Dump
+        st.subheader("3. GL Dump (Optional)")
+        gl_files = st.file_uploader(
+            "Upload GL dump file(s)",
+            type=['xlsx', 'xls', 'csv'],
+            accept_multiple_files=True,
+            help="General Ledger transaction details for detailed analysis (Output B & C)",
+            key="gl"
+        )
+
+        st.markdown("---")
+
+        # Analysis options
+        st.subheader("⚙️ Analysis Options")
+        analysis_type = st.radio(
+            "Select analysis type:",
+            ["Classification Only (Output A)", "Full Analysis (Outputs A, B, C)"],
+            help="Classification provides validation status. Full analysis includes detailed reconciliation."
+        )
+
+        show_mismatches_only = st.checkbox(
+            "Show mismatches only",
+            value=False,
+            help="If checked, Output A will only show accounts with MISMATCH status"
+        )
+
+    # Main content area
+    if not tb_file:
+        # Welcome screen
+        st.info("👈 Please upload a Trial Balance file to get started")
+
+        st.markdown("### How to Use Balance Sheet Buddy")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### 📥 Input Files")
+            st.markdown("""
+            **Trial Balance (Required):**
+            - Excel or CSV format
+            - Must have: Account, Debit, Credit columns
+            - Account can be "Account Number - Name"
+
+            **Category Mapping (Optional):**
+            - Maps accounts to Categories and Subcategories
+            - Helps with automated classification
+            - If not provided, accounts marked as "Unmapped"
+
+            **GL Dump (Optional):**
+            - Transaction-level details
+            - Required for detailed analysis (Outputs B & C)
+            - Multiple files supported
+            """)
+
+        with col2:
+            st.markdown("#### 📤 Outputs")
+            st.markdown("""
+            **Output A - Classification View:**
+            - Excel file with validation status
+            - Shows PASS/MISMATCH for each account
+            - Validates balance behavior (Asset=Debit, Liability=Credit, etc.)
+
+            **Output B - Account Reconciliation:**
+            - Detailed breakdown of each account
+            - Top 5 components, aging analysis
+            - Action recommendations
+
+            **Output C - Executive Summary:**
+            - High-level overview
+            - Accounts needing attention
+            - Key risk items
+            """)
+
+        st.markdown("---")
+        st.markdown("### Expected Balance Behavior")
+        st.markdown("""
+        | Account Type | Expected Balance | Status if Correct |
+        |--------------|------------------|-------------------|
+        | Asset | Debit | ✅ PASS |
+        | Liability | Credit | ✅ PASS |
+        | Equity | Credit | ✅ PASS |
+        | Clearing | Zero | ✅ PASS |
+        | Contra-Asset | Credit | ✅ PASS |
+        """)
+
+    else:
+        # Process uploaded files
+        st.success("✓ Trial Balance uploaded")
+
+        # Analysis button
+        if st.button("🚀 Analyze Balance Sheet", type="primary", use_container_width=True):
+            with st.spinner("Processing files and performing analysis..."):
+
+                try:
+                    # Step 1: Parse Trial Balance
+                    with st.status("📊 Parsing Trial Balance...", expanded=True) as status:
+                        tb_df = processor.parse_trial_balance(tb_file)
+                        st.write(f"✓ Loaded {len(tb_df)} accounts")
+
+                        # Clean data
+                        tb_df_clean = processor.clean_data(tb_df)
+                        removed = len(tb_df) - len(tb_df_clean)
+                        st.write(f"✓ Removed {removed} blank/total rows")
+                        st.write(f"✓ {len(tb_df_clean)} accounts ready for analysis")
+
+                        status.update(label="✓ Trial Balance parsed", state="complete")
+
+                    # Step 2: Load and merge category mapping
+                    with st.status("🗂️ Loading category mapping...", expanded=True) as status:
+                        if mapping_file:
+                            mapping_df = processor.load_category_mapping(mapping_file)
+                            st.write(f"✓ Loaded {len(mapping_df)} category mappings from uploaded file")
+                        elif use_default_mapping:
+                            with open(default_mapping_path, 'rb') as f:
+                                mapping_df = processor.load_category_mapping(f)
+                            st.write(f"✓ Loaded {len(mapping_df)} category mappings from default file")
+                        else:
+                            mapping_df = pd.DataFrame({
+                                'Account_Key': [],
+                                'Category': [],
+                                'Subcategory': []
+                            })
+                            st.write("⚠️ No mapping file provided - accounts will be marked as 'Unmapped'")
+
+                        # Merge with trial balance
+                        tb_merged = processor.merge_with_mapping(tb_df_clean, mapping_df)
+                        mapped_count = len(tb_merged[tb_merged['Category'] != 'Unmapped'])
+                        st.write(f"✓ Mapped {mapped_count}/{len(tb_merged)} accounts")
+
+                        status.update(label="✓ Category mapping applied", state="complete")
+
+                    # Step 3: Format for Claude
+                    with st.status("🤖 Preparing data for AI analysis...", expanded=True) as status:
+                        tb_text = processor.format_for_claude(tb_merged)
+                        st.write(f"✓ Formatted {len(tb_merged)} accounts for analysis")
+                        status.update(label="✓ Data formatted", state="complete")
+
+                    # Step 4: Call Claude for Output A
+                    with st.status("🧠 Analyzing with Claude AI (Output A)...", expanded=True) as status:
+                        if show_mismatches_only:
+                            prompt = prompts.generate_mismatch_only_prompt(tb_text)
+                        else:
+                            prompt = prompts.generate_output_a_prompt(tb_text)
+
+                        classification_result = call_claude(prompt, api_key)
+
+                        if classification_result:
+                            st.write("✓ Classification analysis complete")
+                            status.update(label="✓ Output A generated", state="complete")
+                        else:
+                            st.error("Failed to get analysis from Claude")
+                            st.stop()
+
+                    # Step 5: Parse classification results into DataFrame
+                    with st.status("📋 Parsing classification results...", expanded=True) as status:
+                        classification_df = outputs.parse_claude_table_response(classification_result)
+
+                        # If parsing was successful, merge with trial balance data
+                        if not classification_df.empty:
+                            st.write(f"✓ Parsed {len(classification_df)} accounts from Claude response")
+                        else:
+                            st.write("⚠️ Using trial balance data with basic classification")
+                            classification_df = tb_merged.copy()
+
+                        # Generate Excel
+                        excel_output = outputs.create_classification_excel(classification_result, tb_merged)
+                        st.write("✓ Excel file created")
+                        status.update(label="✓ Classification parsed", state="complete")
+
+                    # Step 6: If full analysis requested and GL provided
+                    reconciliation_result = None
+                    if analysis_type == "Full Analysis (Outputs A, B, C)" and gl_files:
+                        with st.status("🧠 Performing detailed reconciliation (Outputs B & C)...", expanded=True) as status:
+                            # Parse GL dumps
+                            gl_dfs = []
+                            for gl_file in gl_files:
+                                try:
+                                    gl_df = processor.parse_gl_dump(gl_file)
+                                    gl_dfs.append(gl_df)
+                                    st.write(f"✓ Loaded {len(gl_df)} transactions from {gl_file.name}")
+                                except Exception as e:
+                                    st.warning(f"⚠️ Could not parse {gl_file.name}: {str(e)}")
+
+                            if gl_dfs:
+                                # Combine all GL data
+                                gl_combined = pd.concat(gl_dfs, ignore_index=True)
+                                gl_text = processor.format_gl_for_claude(gl_combined)
+                                st.write(f"✓ Total {len(gl_combined)} transactions loaded")
+
+                                # Call Claude for Outputs B & C
+                                bc_prompt = prompts.generate_output_bc_prompt(tb_text, gl_text)
+                                reconciliation_result = call_claude(bc_prompt, api_key)
+
+                                if reconciliation_result:
+                                    st.write("✓ Detailed reconciliation complete")
+                                    status.update(label="✓ Outputs B & C generated", state="complete")
+                            else:
+                                st.warning("No GL data could be parsed")
+                                status.update(label="⚠️ GL parsing failed", state="error")
+
+                    elif analysis_type == "Full Analysis (Outputs A, B, C)" and not gl_files:
+                        st.warning("⚠️ Full analysis requires GL dump files. Upload GL files in the sidebar.")
+
+                    # Store results in session state
+                    st.session_state.analysis_complete = True
+                    st.session_state.classification_result = classification_result
+                    st.session_state.classification_df = classification_df
+                    st.session_state.excel_output = excel_output
+                    st.session_state.reconciliation_result = reconciliation_result
+                    st.session_state.tb_merged = tb_merged
+
+                except Exception as e:
+                    st.error(f"❌ Error during analysis: {str(e)}")
+                    st.exception(e)
+
+        # Display results (outside the button block, using session state)
+        if st.session_state.analysis_complete:
+            st.markdown("---")
+            st.header("📊 Analysis Results")
+
+            # Summary stats - pass DataFrame for better statistics
+            stats = outputs.extract_summary_stats(
+                st.session_state.classification_result,
+                st.session_state.tb_merged
+            )
+            st.markdown(outputs.create_summary_text(stats))
+
+            st.markdown("---")
+
+            # Output tabs
+            if st.session_state.reconciliation_result:
+                tab1, tab2, tab3 = st.tabs(["📋 Output A - Classification", "📊 Output B - Reconciliation", "📈 Output C - Summary"])
+            else:
+                tab1, = st.tabs(["📋 Output A - Classification"])
+
+            with tab1:
+                st.subheader("Classification View")
+
+                # Download button for Excel
+                st.download_button(
+                    label="⬇️ Download Output A (Excel)",
+                    data=st.session_state.excel_output,
+                    file_name=f"Balance_Sheet_Classification_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="download_excel"
+                )
+
+                # Display classification results as table
+                st.markdown("#### Classification Results")
+                if st.session_state.classification_df is not None and not st.session_state.classification_df.empty:
+                    # Format the dataframe for display
+                    display_df = st.session_state.classification_df.copy()
+
+                    # Color code based on status
+                    def highlight_status(row):
+                        if 'Status' in row and isinstance(row['Status'], str):
+                            if row['Status'].upper() == 'PASS':
+                                return ['background-color: #d4edda'] * len(row)
+                            elif row['Status'].upper() == 'MISMATCH':
+                                return ['background-color: #f8d7da'] * len(row)
+                        return [''] * len(row)
+
+                    # Display with styling
+                    st.dataframe(
+                        display_df.style.apply(highlight_status, axis=1),
+                        use_container_width=True,
+                        height=400
+                    )
+                else:
+                    st.info("Classification table could not be parsed. Download Excel file for full results.")
+
+                # Show raw text as expandable section
+                with st.expander("📄 View Raw Claude Response"):
+                    st.text(st.session_state.classification_result)
+
+            if st.session_state.reconciliation_result:
+                # Parse sections
+                sections = st.session_state.reconciliation_result.split("OUTPUT C")
+                output_b = sections[0].replace("OUTPUT B", "").strip()
+                output_c = sections[1].strip() if len(sections) > 1 else ""
+
+                with tab2:
+                    st.subheader("Account-Level Reconciliation")
+                    st.markdown(output_b)
+
+                    # Download button
+                    st.download_button(
+                        label="⬇️ Download Output B (Text)",
+                        data=output_b,
+                        file_name=f"Account_Reconciliation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                        mime="text/plain",
+                        use_container_width=True,
+                        key="download_output_b"
+                    )
+
+                with tab3:
+                    st.subheader("Executive Summary")
+                    st.markdown(output_c)
+
+                    # Download button
+                    st.download_button(
+                        label="⬇️ Download Output C (Text)",
+                        data=output_c,
+                        file_name=f"Executive_Summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                        mime="text/plain",
+                        use_container_width=True,
+                        key="download_output_c"
+                    )
+
+                # Combined report download
+                st.markdown("---")
+                combined_html = outputs.create_combined_report(
+                    st.session_state.classification_result,
+                    output_b,
+                    output_c
+                )
+                st.download_button(
+                    label="⬇️ Download Complete Report (HTML)",
+                    data=combined_html,
+                    file_name=f"Balance_Sheet_Complete_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    key="download_complete"
+                )
+
+            st.success("✅ Analysis complete!")
+
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; color: #666; font-size: 0.9em;'>
+        <p>Balance Sheet Buddy | Powered by Claude AI (Sonnet 4.5)</p>
+        <p>Cost estimate: ~$0.50-$2 per analysis |
+        <a href='https://github.com' target='_blank'>Documentation</a> |
+        <a href='https://console.anthropic.com' target='_blank'>Get API Key</a></p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+if __name__ == "__main__":
+    main()
