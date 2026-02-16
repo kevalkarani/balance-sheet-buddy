@@ -349,7 +349,10 @@ def main():
 
             # Also pass DataFrame to summary for listing mismatched accounts
             classification_df_for_stats = st.session_state.classification_df if st.session_state.classification_df is not None and not st.session_state.classification_df.empty else st.session_state.tb_merged
-            st.markdown(outputs.create_summary_text(stats, classification_df_for_stats))
+
+            # Display summary in a code block for proper formatting
+            summary_text = outputs.create_summary_text(stats, classification_df_for_stats)
+            st.text(summary_text)
 
             st.markdown("---")
 
