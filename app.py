@@ -395,10 +395,10 @@ def main():
             st.markdown("---")
             st.header("📊 Analysis Results")
 
-            # Summary stats - pass DataFrame for better statistics
+            # Summary stats - pass classification DataFrame which has Status column
             stats = outputs.extract_summary_stats(
                 st.session_state.classification_result,
-                st.session_state.tb_merged
+                st.session_state.classification_df  # Changed from tb_merged to classification_df
             )
 
             # Also pass DataFrame to summary for listing mismatched accounts
