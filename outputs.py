@@ -523,7 +523,12 @@ def create_summary_text(stats: Dict, df: pd.DataFrame = None) -> str:
                 account = row.get('Account', 'Unknown')
                 category = row.get('Category', 'N/A')
                 amount = row.get('Amount', 0)
-                lines.append(f"   • {account} ({category}) - ${amount:,.2f}")
+                # Convert amount to float if it's a string
+                try:
+                    amount_float = float(amount) if amount else 0.0
+                except (ValueError, TypeError):
+                    amount_float = 0.0
+                lines.append(f"   • {account} ({category}) - ${amount_float:,.2f}")
             lines.append("")
 
     # Add category breakdown if available
