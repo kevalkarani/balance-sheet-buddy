@@ -46,6 +46,41 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
     st.subheader("📋 Account Reconciliation")
     st.markdown("Work through each account systematically to complete reconciliation.")
 
+    # NetSuite GL Dump Instructions
+    with st.expander("📊 How to Get GL Dump from NetSuite", expanded=False):
+        st.markdown("""
+        ### Step-by-Step Instructions:
+
+        1. **Open NetSuite GL Dump Report**
+           - Click here: [NetSuite GL Dump Report](https://4914352.app.netsuite.com/app/reporting/reportrunner.nl?cr=4386&reload=t&whence=)
+           - Or navigate to: **Reports → GL Dump Details - All Accounts**
+
+        2. **Set Filters** (at bottom of report):
+           - **PERIOD**: Select period (e.g., Jan 2015 to Feb 2026)
+           - **SUBSIDIARY CONTEXT**: Select your subsidiary (e.g., Aurea Software FZ-LLC Dubai)
+           - **ACCOUNT**: Enter the specific account number you want to reconcile
+           - Click **MORE → Find...** to add additional filters if needed
+
+        3. **Run Report**
+           - Click **Run Report** or wait for report to load
+           - Report will show all transactions for the selected account
+
+        4. **Export to Excel/CSV**
+           - Click **Export** button (usually at top right)
+           - Select **Excel** or **CSV** format
+           - Save the file
+
+        5. **Upload Here**
+           - Return to this app
+           - Click **Reconcile** button for the account
+           - Upload the exported Excel/CSV file
+           - Complete the reconciliation process
+
+        **Note:** You need to export GL dump separately for each account you want to reconcile.
+        """)
+
+    st.markdown("---")
+
     # Get or create session ID
     session_id = get_session_id(tb_merged)
 
