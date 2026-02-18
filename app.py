@@ -14,6 +14,7 @@ import processor
 import prompts
 import outputs
 import reconciliation
+import session_manager
 
 
 # Page configuration
@@ -96,6 +97,25 @@ def main():
 
     # Sidebar
     with st.sidebar:
+        # Session Management - Load Previous Session
+        st.markdown("### 📂 Load Previous Session")
+        session_file = st.file_uploader(
+            "Upload saved session file",
+            type=['json'],
+            help="Restore your previous work by uploading a saved session file",
+            key="session_uploader"
+        )
+
+        if session_file:
+            if st.button("🔄 Restore Session", type="primary", width='stretch'):
+                with st.spinner("Restoring session..."):
+                    if session_manager.import_session(session_file):
+                        st.success("✅ Session restored successfully!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to restore session")
+
+        st.markdown("---")
         st.header("📁 File Uploads")
 
         # Category Mapping - Always use default (hidden from users)
@@ -215,7 +235,7 @@ def main():
         # Analysis button - prominently displayed
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            analyze_button = st.button("🚀 Analyze Balance Sheet", type="primary", use_container_width=True)
+            analyze_button = st.button("🚀 Analyze Balance Sheet", type="primary", width='stretch')
 
         if analyze_button:
             with st.spinner("Processing files and performing analysis..."):
@@ -417,7 +437,22 @@ def main():
         # Display results (outside the button block, using session state)
         if st.session_state.analysis_complete:
             st.markdown("---")
-            st.header("📊 Analysis Results")
+
+            # Header with Save Session button
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.header("📊 Analysis Results")
+            with col2:
+                # Save Session button
+                session_bytes = session_manager.export_session()
+                st.download_button(
+                    label="💾 Save Session",
+                    data=session_bytes,
+                    file_name=f"BSBuddy_Session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json",
+                    width='stretch',
+                    help="Save your work to continue later"
+                )
 
             # Summary stats - pass classification DataFrame which has Status column
             stats = outputs.extract_summary_stats(
@@ -457,7 +492,7 @@ def main():
                     data=st.session_state.excel_output,
                     file_name=f"Balance_Sheet_Classification_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
+                    width='stretch',
                     key="download_excel"
                 )
 
@@ -505,7 +540,7 @@ def main():
                     # Display with styling - large height to show many rows
                     st.dataframe(
                         styled_df,
-                        use_container_width=True,
+                        width='stretch',
                         height=600  # Scrollable table
                     )
                 else:
@@ -539,7 +574,7 @@ def main():
                         data=output_b,
                         file_name=f"Account_Reconciliation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
                         mime="text/plain",
-                        use_container_width=True,
+                        width='stretch',
                         key="download_output_b"
                     )
 
@@ -553,7 +588,7 @@ def main():
                         data=output_c,
                         file_name=f"Executive_Summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
                         mime="text/plain",
-                        use_container_width=True,
+                        width='stretch',
                         key="download_output_c"
                     )
 
@@ -569,7 +604,7 @@ def main():
                     data=combined_html,
                     file_name=f"Balance_Sheet_Complete_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
                     mime="text/html",
-                    use_container_width=True,
+                    width='stretch',
                     key="download_complete"
                 )
 

@@ -227,7 +227,7 @@ def show_bank_reconciliation_interface(account: str, tb_merged: pd.DataFrame, se
 
         # Display the image
         if bank_screenshot.type.startswith('image/'):
-            st.image(bank_screenshot, caption="Bank Statement", use_container_width=True)
+            st.image(bank_screenshot, caption="Bank Statement", width='stretch')
 
         st.markdown("### 2. Verify Balance Match")
 
@@ -397,7 +397,7 @@ def show_reconciliation_interface(account: str, tb_merged: pd.DataFrame, session
 
             # Show transaction summary
             with st.expander("📊 View Transactions"):
-                st.dataframe(gl_df, use_container_width=True)
+                st.dataframe(gl_df, width='stretch')
 
             # Interactive reconciliation with Claude
             st.markdown("### 2. Reconciliation Analysis")

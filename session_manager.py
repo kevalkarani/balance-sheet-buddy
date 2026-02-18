@@ -1,0 +1,139 @@
+"""
+Session Management Module
+Handles saving and restoring work sessions including TB data, classification results, and reconciliation progress.
+"""
+
+import streamlit as st
+import pandas as pd
+import json
+import pickle
+import base64
+from datetime import datetime
+from typing import Dict, Any
+import io
+
+
+def export_session() -> bytes:
+    """
+    Export current session state to a downloadable file.
+    Returns serialized session data as bytes.
+    """
+    session_data = {
+        'export_timestamp': datetime.now().isoformat(),
+        'version': '1.0',
+        'data': {}
+    }
+
+    # Save classification DataFrame
+    if 'classification_df' in st.session_state and st.session_state.classification_df is not None:
+        session_data['data']['classification_df'] = st.session_state.classification_df.to_json(orient='split')
+
+    # Save trial balance DataFrame
+    if 'tb_merged' in st.session_state and st.session_state.tb_merged is not None:
+        session_data['data']['tb_merged'] = st.session_state.tb_merged.to_json(orient='split')
+
+    # Save classification result text
+    if 'classification_result' in st.session_state:
+        session_data['data']['classification_result'] = st.session_state.classification_result
+
+    # Save reconciliation result text
+    if 'reconciliation_result' in st.session_state:
+        session_data['data']['reconciliation_result'] = st.session_state.reconciliation_result
+
+    # Save Excel output
+    if 'excel_output' in st.session_state and st.session_state.excel_output is not None:
+        session_data['data']['excel_output'] = base64.b64encode(st.session_state.excel_output).decode('utf-8')
+
+    # Save reconciliation state (which accounts are reconciled)
+    if 'reconciliation_state' in st.session_state:
+        session_data['data']['reconciliation_state'] = st.session_state.reconciliation_state
+
+    # Save analysis completion flag
+    if 'analysis_complete' in st.session_state:
+        session_data['data']['analysis_complete'] = st.session_state.analysis_complete
+
+    # Serialize to JSON
+    json_str = json.dumps(session_data, indent=2)
+    return json_str.encode('utf-8')
+
+
+def import_session(uploaded_file) -> bool:
+    """
+    Import and restore a previously saved session.
+    Returns True if successful, False otherwise.
+    """
+    try:
+        # Read the uploaded file
+        session_data = json.load(uploaded_file)
+
+        # Verify version
+        if 'version' not in session_data or 'data' not in session_data:
+            st.error("Invalid session file format")
+            return False
+
+        data = session_data['data']
+
+        # Restore classification DataFrame
+        if 'classification_df' in data:
+            st.session_state.classification_df = pd.read_json(io.StringIO(data['classification_df']), orient='split')
+
+        # Restore trial balance DataFrame
+        if 'tb_merged' in data:
+            st.session_state.tb_merged = pd.read_json(io.StringIO(data['tb_merged']), orient='split')
+
+        # Restore classification result text
+        if 'classification_result' in data:
+            st.session_state.classification_result = data['classification_result']
+
+        # Restore reconciliation result text
+        if 'reconciliation_result' in data:
+            st.session_state.reconciliation_result = data['reconciliation_result']
+
+        # Restore Excel output
+        if 'excel_output' in data:
+            st.session_state.excel_output = base64.b64decode(data['excel_output'].encode('utf-8'))
+
+        # Restore reconciliation state
+        if 'reconciliation_state' in data:
+            st.session_state.reconciliation_state = data['reconciliation_state']
+
+        # Restore analysis completion flag
+        if 'analysis_complete' in data:
+            st.session_state.analysis_complete = data['analysis_complete']
+        else:
+            st.session_state.analysis_complete = True  # If we have data, analysis was complete
+
+        return True
+
+    except Exception as e:
+        st.error(f"Error importing session: {str(e)}")
+        return False
+
+
+def get_session_summary(session_data: Dict[str, Any]) -> str:
+    """
+    Generate a summary of what's in a session file.
+    """
+    if 'data' not in session_data:
+        return "Invalid session file"
+
+    data = session_data['data']
+    summary_parts = []
+
+    # Count accounts
+    if 'classification_df' in data:
+        df = pd.read_json(io.StringIO(data['classification_df']), orient='split')
+        summary_parts.append(f"📊 {len(df)} accounts")
+
+    # Check reconciliation progress
+    if 'reconciliation_state' in data:
+        recon_state = data['reconciliation_state']
+        reconciled_count = sum(1 for acc in recon_state.values() if acc.get('reconciled', False))
+        summary_parts.append(f"✓ {reconciled_count} accounts reconciled")
+
+    # Export timestamp
+    if 'export_timestamp' in session_data:
+        timestamp = session_data['export_timestamp']
+        summary_parts.append(f"📅 Saved: {timestamp[:10]}")
+
+    return " | ".join(summary_parts) if summary_parts else "Session data available"
