@@ -124,6 +124,13 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     # Also remove "Opening Balance" rows as they're often aggregates
     df = df[~df['Account'].astype(str).str.contains(r'^\s*opening\s+balance', case=False, na=False)]
 
+    # Handle duplicate accounts by summing their balances
+    # Group by Account and sum Debit and Credit
+    df = df.groupby('Account', as_index=False).agg({
+        'Debit': 'sum',
+        'Credit': 'sum'
+    })
+
     return df.reset_index(drop=True)
 
 

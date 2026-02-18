@@ -458,6 +458,25 @@ def main():
                     # Format the dataframe for display
                     display_df = st.session_state.classification_df.copy()
 
+                    # Format numerical columns to millions (no decimals)
+                    def format_millions(value):
+                        """Format number as millions without decimals."""
+                        try:
+                            num = float(value)
+                            if abs(num) >= 1_000_000:
+                                return f"{num/1_000_000:.0f}M"
+                            elif abs(num) >= 1_000:
+                                return f"{num/1_000:.0f}K"
+                            else:
+                                return f"{num:.0f}"
+                        except (ValueError, TypeError):
+                            return value
+
+                    # Apply formatting to numerical columns
+                    for col in ['Debit', 'Credit', 'Amount']:
+                        if col in display_df.columns:
+                            display_df[col] = display_df[col].apply(format_millions)
+
                     # Color code based on status
                     def highlight_status(row):
                         if 'Status' in row and isinstance(row['Status'], str):
