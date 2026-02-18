@@ -403,11 +403,9 @@ def main():
                         st.write("✓ Excel file created")
                         status.update(label="✓ Classification parsed", state="complete")
 
-                    # Step 6: If full analysis requested and GL provided
-                    reconciliation_result = None
-                    if analysis_type == "Full Analysis (Outputs A, B, C)" and gl_files:
-                        with st.status("🧠 Performing detailed reconciliation (Outputs B & C)...", expanded=True) as status:
-                            # Parse GL dumps
+                    # Step 6: Process GL files if provided (for GL Chat and Full Analysis)
+                    if gl_files:
+                        with st.status("📂 Loading GL data...", expanded=True) as status:
                             gl_dfs = []
                             for gl_file in gl_files:
                                 try:
@@ -418,22 +416,29 @@ def main():
                                     st.warning(f"⚠️ Could not parse {gl_file.name}: {str(e)}")
 
                             if gl_dfs:
-                                # Combine all GL data
+                                # Combine all GL data and store for GL Chat
                                 gl_combined = pd.concat(gl_dfs, ignore_index=True)
-                                st.session_state.gl_combined = gl_combined  # Store for GL Chat
-                                gl_text = processor.format_gl_for_claude(gl_combined)
-                                st.write(f"✓ Total {len(gl_combined)} transactions loaded")
-
-                                # Call Claude for Outputs B & C
-                                bc_prompt = prompts.generate_output_bc_prompt(tb_text, gl_text)
-                                reconciliation_result = call_claude(bc_prompt, api_key)
-
-                                if reconciliation_result:
-                                    st.write("✓ Detailed reconciliation complete")
-                                    status.update(label="✓ Outputs B & C generated", state="complete")
+                                st.session_state.gl_combined = gl_combined
+                                st.write(f"✓ Total {len(gl_combined)} transactions loaded for GL Chat")
+                                status.update(label="✓ GL data loaded", state="complete")
                             else:
                                 st.warning("No GL data could be parsed")
                                 status.update(label="⚠️ GL parsing failed", state="error")
+
+                    # Step 7: If full analysis requested, generate Outputs B & C
+                    reconciliation_result = None
+                    if analysis_type == "Full Analysis (Outputs A, B, C)" and st.session_state.gl_combined is not None:
+                        with st.status("🧠 Performing detailed reconciliation (Outputs B & C)...", expanded=True) as status:
+                            # Use already-loaded GL data
+                            gl_text = processor.format_gl_for_claude(st.session_state.gl_combined)
+
+                            # Call Claude for Outputs B & C
+                            bc_prompt = prompts.generate_output_bc_prompt(tb_text, gl_text)
+                            reconciliation_result = call_claude(bc_prompt, api_key)
+
+                            if reconciliation_result:
+                                st.write("✓ Detailed reconciliation complete")
+                                status.update(label="✓ Outputs B & C generated", state="complete")
 
                     elif analysis_type == "Full Analysis (Outputs A, B, C)" and not gl_files:
                         st.warning("⚠️ Full analysis requires GL dump files. Upload GL files in the sidebar.")
