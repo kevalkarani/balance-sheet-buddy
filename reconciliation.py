@@ -97,9 +97,10 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
         lambda acc: st.session_state.reconciliation_state.get(str(acc), {}).get('reconciled', False)
     )
 
-    # Summary statistics
-    total_accounts = len(recon_df)
-    reconciled_count = recon_df['Reconciled'].sum()
+    # Summary statistics (exclude P&L accounts from reconciliation tracking)
+    accounts_needing_recon = recon_df[recon_df['Subcategory'] != 'PL']
+    total_accounts = len(accounts_needing_recon)
+    reconciled_count = accounts_needing_recon['Reconciled'].sum()
     progress_pct = (reconciled_count / total_accounts * 100) if total_accounts > 0 else 0
 
     col1, col2, col3 = st.columns(3)
@@ -111,6 +112,11 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
         st.metric("Remaining", total_accounts - reconciled_count)
 
     st.progress(progress_pct / 100)
+
+    # Show info about P&L accounts
+    pl_count = len(recon_df[recon_df['Subcategory'] == 'PL'])
+    if pl_count > 0:
+        st.caption(f"ℹ️ {pl_count} P&L account(s) excluded (no reconciliation needed)")
 
     st.markdown("---")
 
@@ -160,15 +166,24 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
             with cols[3]:
                 st.write(row.get('Subcategory', ''))
             with cols[4]:
-                if row['Reconciled']:
+                subcategory = row.get('Subcategory', '')
+                # P&L accounts don't need reconciliation
+                if subcategory == 'PL':
+                    st.info("N/A")
+                elif row['Reconciled']:
                     st.success("✓ Done")
                 else:
                     st.warning("⏳ Pending")
             with cols[5]:
-                if st.button("Reconcile", key=f"recon_{idx}"):
-                    st.session_state.selected_account = account
-                    st.session_state.show_reconciliation_interface = True
-                    st.rerun()
+                subcategory = row.get('Subcategory', '')
+                # P&L accounts don't need reconciliation - show N/A instead of button
+                if subcategory == 'PL':
+                    st.write("—")
+                else:
+                    if st.button("Reconcile", key=f"recon_{idx}"):
+                        st.session_state.selected_account = account
+                        st.session_state.show_reconciliation_interface = True
+                        st.rerun()
 
     # Show reconciliation interface if account selected
     if st.session_state.get('show_reconciliation_interface', False):
