@@ -97,8 +97,11 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
         lambda acc: st.session_state.reconciliation_state.get(str(acc), {}).get('reconciled', False)
     )
 
-    # Summary statistics (exclude P&L accounts from reconciliation tracking)
-    accounts_needing_recon = recon_df[recon_df['Subcategory'] != 'PL']
+    # Summary statistics (exclude P&L and "PL - Ignore" accounts from reconciliation tracking)
+    accounts_needing_recon = recon_df[
+        (recon_df['Subcategory'] != 'PL') &
+        (recon_df['Category'] != 'PL - Ignore')
+    ]
     total_accounts = len(accounts_needing_recon)
     reconciled_count = accounts_needing_recon['Reconciled'].sum()
     progress_pct = (reconciled_count / total_accounts * 100) if total_accounts > 0 else 0
@@ -113,10 +116,12 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
 
     st.progress(progress_pct / 100)
 
-    # Show info about P&L accounts
+    # Show info about excluded accounts
     pl_count = len(recon_df[recon_df['Subcategory'] == 'PL'])
-    if pl_count > 0:
-        st.caption(f"ℹ️ {pl_count} P&L account(s) excluded (no reconciliation needed)")
+    pl_ignore_count = len(recon_df[recon_df['Category'] == 'PL - Ignore'])
+    total_excluded = pl_count + pl_ignore_count
+    if total_excluded > 0:
+        st.caption(f"ℹ️ {total_excluded} account(s) excluded (PL/PL-Ignore - no reconciliation needed)")
 
     st.markdown("---")
 
@@ -167,17 +172,19 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
                 st.write(row.get('Subcategory', ''))
             with cols[4]:
                 subcategory = row.get('Subcategory', '')
-                # P&L accounts don't need reconciliation
-                if subcategory == 'PL':
-                    st.info("N/A")
+                category = row.get('Category', '')
+                # P&L and "PL - Ignore" accounts don't need reconciliation
+                if subcategory == 'PL' or category == 'PL - Ignore':
+                    st.info("Not Required")
                 elif row['Reconciled']:
                     st.success("✓ Done")
                 else:
                     st.warning("⏳ Pending")
             with cols[5]:
                 subcategory = row.get('Subcategory', '')
-                # P&L accounts don't need reconciliation - show N/A instead of button
-                if subcategory == 'PL':
+                category = row.get('Category', '')
+                # P&L and "PL - Ignore" accounts don't need reconciliation - no button
+                if subcategory == 'PL' or category == 'PL - Ignore':
                     st.write("—")
                 else:
                     if st.button("Reconcile", key=f"recon_{idx}"):
