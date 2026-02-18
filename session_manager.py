@@ -46,7 +46,11 @@ def export_session() -> bytes:
 
     # Save Excel output
     if 'excel_output' in st.session_state and st.session_state.excel_output is not None:
-        session_data['data']['excel_output'] = base64.b64encode(st.session_state.excel_output).decode('utf-8')
+        excel_data = st.session_state.excel_output
+        # Handle BytesIO objects
+        if hasattr(excel_data, 'getvalue'):
+            excel_data = excel_data.getvalue()
+        session_data['data']['excel_output'] = base64.b64encode(excel_data).decode('utf-8')
 
     # Save reconciliation state (which accounts are reconciled)
     if 'reconciliation_state' in st.session_state:
@@ -205,7 +209,11 @@ def auto_save_session(session_id: Optional[str] = None) -> str:
         session_data['data']['reconciliation_result'] = st.session_state.reconciliation_result
 
     if 'excel_output' in st.session_state and st.session_state.excel_output is not None:
-        session_data['data']['excel_output'] = base64.b64encode(st.session_state.excel_output).decode('utf-8')
+        excel_data = st.session_state.excel_output
+        # Handle BytesIO objects
+        if hasattr(excel_data, 'getvalue'):
+            excel_data = excel_data.getvalue()
+        session_data['data']['excel_output'] = base64.b64encode(excel_data).decode('utf-8')
 
     if 'reconciliation_state' in st.session_state:
         session_data['data']['reconciliation_state'] = st.session_state.reconciliation_state
