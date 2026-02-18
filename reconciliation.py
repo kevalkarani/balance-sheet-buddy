@@ -589,34 +589,34 @@ Transactions: {len(gl_df)}
                 st.markdown("### 💬 Chat with GL Data")
                 st.markdown(f"Ask questions about the GL transactions for **{account}**")
 
-                    # Initialize chat history for this account
-                    chat_key = f'gl_chat_{account}'
-                    if chat_key not in st.session_state:
-                        st.session_state[chat_key] = []
+                # Initialize chat history for this account
+                chat_key = f'gl_chat_{account}'
+                if chat_key not in st.session_state:
+                    st.session_state[chat_key] = []
 
-                    # Display chat history
-                    for message in st.session_state[chat_key]:
-                        with st.chat_message(message["role"]):
-                            st.markdown(message["content"])
+                # Display chat history
+                for message in st.session_state[chat_key]:
+                    with st.chat_message(message["role"]):
+                        st.markdown(message["content"])
 
-                    # Chat input
-                    user_input = st.chat_input(f"Ask about {account} transactions...", key=f"chat_input_{account}")
+                # Chat input
+                user_input = st.chat_input(f"Ask about {account} transactions...", key=f"chat_input_{account}")
 
-                    if user_input:
-                        # Add user message
-                        st.session_state[chat_key].append({
-                            "role": "user",
-                            "content": user_input
-                        })
+                if user_input:
+                    # Add user message
+                    st.session_state[chat_key].append({
+                        "role": "user",
+                        "content": user_input
+                    })
 
-                        # Get GL context
-                        gl_context = processor.format_gl_for_claude(gl_df, account)
+                    # Get GL context
+                    gl_context = processor.format_gl_for_claude(gl_df, account)
 
-                        # Build messages for Claude
-                        from anthropic import Anthropic
-                        client = Anthropic(api_key=api_key)
+                    # Build messages for Claude
+                    from anthropic import Anthropic
+                    client = Anthropic(api_key=api_key)
 
-                        system_prompt = f"""You are a financial analysis assistant. You have access to GL transaction data for account {account}.
+                    system_prompt = f"""You are a financial analysis assistant. You have access to GL transaction data for account {account}.
 
 Account Details:
 - Account: {account}
@@ -629,31 +629,31 @@ GL Transactions:
 
 Answer questions about these transactions clearly and concisely. Use actual data to support your answers."""
 
-                        # Prepare messages
-                        api_messages = []
-                        for msg in st.session_state[chat_key]:
-                            api_messages.append({
-                                "role": msg["role"],
-                                "content": msg["content"]
-                            })
-
-                        # Get response
-                        response = client.messages.create(
-                            model="claude-sonnet-4-5-20250929",
-                            max_tokens=2048,
-                            system=system_prompt,
-                            messages=api_messages
-                        )
-
-                        assistant_response = response.content[0].text
-
-                        # Add assistant response
-                        st.session_state[chat_key].append({
-                            "role": "assistant",
-                            "content": assistant_response
+                    # Prepare messages
+                    api_messages = []
+                    for msg in st.session_state[chat_key]:
+                        api_messages.append({
+                            "role": msg["role"],
+                            "content": msg["content"]
                         })
 
-                        st.rerun()
+                    # Get response
+                    response = client.messages.create(
+                        model="claude-sonnet-4-5-20250929",
+                        max_tokens=2048,
+                        system=system_prompt,
+                        messages=api_messages
+                    )
+
+                    assistant_response = response.content[0].text
+
+                    # Add assistant response
+                    st.session_state[chat_key].append({
+                        "role": "assistant",
+                        "content": assistant_response
+                    })
+
+                    st.rerun()
 
         except Exception as e:
             st.error(f"Error parsing GL dump: {str(e)}")
