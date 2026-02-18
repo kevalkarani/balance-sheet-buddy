@@ -531,7 +531,7 @@ Transactions: {len(gl_df)}
 
                 # Output B & C Style Analysis
                 with st.expander("📊 Detailed Executive Analysis (Output B & C Style)", expanded=False):
-                    if st.button("🤖 Generate Executive Analysis", key=f"exec_analysis_{account}"):
+                    if st.button("🤖 Generate Executive Analysis", key=f"btn_exec_analysis_{account}"):
                         with st.spinner("Generating executive-level analysis..."):
                             from anthropic import Anthropic
                             client = Anthropic(api_key=api_key)
