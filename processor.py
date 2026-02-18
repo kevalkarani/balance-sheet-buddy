@@ -37,30 +37,23 @@ def parse_trial_balance(file) -> pd.DataFrame:
             # Now read the file with the correct header row
             df = pd.read_excel(file, header=header_row)
         else:
-            # CSV - try to find header row (handle files with inconsistent column counts)
-            try:
-                # Try newer pandas parameter
-                df_raw = pd.read_csv(file, header=None, nrows=20, on_bad_lines='skip')
-            except TypeError:
-                # Fallback for older pandas versions
-                df_raw = pd.read_csv(file, header=None, nrows=20, error_bad_lines=False, warn_bad_lines=False)
+            # CSV - read as text to find header row, then parse properly
+            file.seek(0)
+            lines = file.read().decode('utf-8', errors='ignore').split('\n')
 
             header_row = None
-            for idx, row in df_raw.iterrows():
-                row_str = ' '.join([str(x).lower() for x in row if pd.notna(x)])
-                if 'account' in row_str and 'debit' in row_str and 'credit' in row_str:
+            for idx, line in enumerate(lines[:20]):  # Check first 20 lines
+                line_lower = line.lower()
+                if 'account' in line_lower and 'debit' in line_lower and 'credit' in line_lower:
                     header_row = idx
                     break
 
             if header_row is None:
                 raise ValueError("Could not find header row with Account, Debit, Credit columns")
 
-            # Read again with correct header row, skipping bad lines
-            file.seek(0)  # Reset file pointer
-            try:
-                df = pd.read_csv(file, header=header_row, on_bad_lines='skip')
-            except TypeError:
-                df = pd.read_csv(file, header=header_row, error_bad_lines=False, warn_bad_lines=False)
+            # Read CSV starting from header row
+            file.seek(0)
+            df = pd.read_csv(file, skiprows=header_row)
 
         # Standardize column names (case-insensitive matching)
         df.columns = df.columns.str.strip()
