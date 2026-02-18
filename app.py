@@ -481,9 +481,21 @@ def main():
                                 return ['background-color: #f8d7da'] * len(row)
                         return [''] * len(row)
 
+                    # Apply styling: colors and right-align numerical columns
+                    styled_df = display_df.style.apply(highlight_status, axis=1)
+
+                    # Right-align numerical columns (Debit, Credit, Amount)
+                    align_dict = {}
+                    for col in ['Debit', 'Credit', 'Amount']:
+                        if col in display_df.columns:
+                            align_dict[col] = 'text-align: right'
+
+                    if align_dict:
+                        styled_df = styled_df.set_properties(subset=list(align_dict.keys()), **{'text-align': 'right'})
+
                     # Display with styling - large height to show many rows
                     st.dataframe(
-                        display_df.style.apply(highlight_status, axis=1),
+                        styled_df,
                         use_container_width=True,
                         height=600  # Scrollable table
                     )
