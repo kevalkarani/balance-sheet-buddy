@@ -296,6 +296,29 @@ def main():
 
                         if has_valid_status:
                             st.write(f"✓ Parsed {len(classification_df)} accounts from Claude response")
+                            # Merge with tb_merged to get Debit, Credit, Amount columns
+                            # Match on Account column
+                            classification_df = tb_merged.merge(
+                                classification_df[['Account', 'Status', 'Balance_Type', 'Commentary'] if 'Commentary' in classification_df.columns else ['Account', 'Status', 'Balance_Type']],
+                                on='Account',
+                                how='left'
+                            )
+                            # Fill missing Status with inferred values
+                            if classification_df['Status'].isna().any():
+                                def infer_status(row):
+                                    if pd.notna(row.get('Status')):
+                                        return row['Status']
+                                    category = str(row.get('Category', '')).lower()
+                                    balance_type = 'Debit' if row['Debit'] > 0 else 'Credit' if row['Credit'] > 0 else 'Zero'
+                                    if 'asset' in category and 'contra' not in category:
+                                        return 'PASS' if balance_type == 'Debit' else 'MISMATCH'
+                                    elif 'liability' in category or 'equity' in category:
+                                        return 'PASS' if balance_type == 'Credit' else 'MISMATCH'
+                                    elif 'clearing' in category:
+                                        return 'PASS' if balance_type == 'Zero' else 'MISMATCH'
+                                    else:
+                                        return 'PASS'
+                                classification_df['Status'] = classification_df.apply(infer_status, axis=1)
                         else:
                             st.write("⚠️ Claude response not in table format or Status column empty - using trial balance with inferred status")
                             # Use trial balance and infer basic status
