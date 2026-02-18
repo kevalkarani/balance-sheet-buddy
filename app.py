@@ -178,7 +178,8 @@ def main():
     if tb_file:
         st.write(f"📁 File detected: {tb_file.name} ({tb_file.size:,} bytes)")
 
-    if not tb_file:
+    # Show welcome screen only if no file AND no restored session
+    if not tb_file and not st.session_state.analysis_complete:
         # Welcome screen
         st.info("👈 Please upload a Trial Balance file to get started")
 
@@ -236,15 +237,20 @@ def main():
         | Contra-Asset | Credit | ✅ PASS |
         """)
 
-    else:
-        # Process uploaded files
-        st.success("✓ Trial Balance uploaded")
-        st.write("---")
+    # Show analysis section if file uploaded OR session restored
+    if tb_file or st.session_state.analysis_complete:
+        # Show upload confirmation only if file was just uploaded
+        if tb_file:
+            st.success("✓ Trial Balance uploaded")
+            st.write("---")
 
-        # Analysis button - prominently displayed
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            analyze_button = st.button("🚀 Analyze Balance Sheet", type="primary", width='stretch')
+        # Analysis button - only show if not already analyzed or if new file uploaded
+        if tb_file and not st.session_state.analysis_complete:
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                analyze_button = st.button("🚀 Analyze Balance Sheet", type="primary", width='stretch')
+        else:
+            analyze_button = False
 
         if analyze_button:
             with st.spinner("Processing files and performing analysis..."):
