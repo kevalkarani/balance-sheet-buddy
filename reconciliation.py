@@ -430,10 +430,33 @@ def show_reconciliation_interface(account: str, tb_merged: pd.DataFrame, session
         try:
             import processor
             gl_df = processor.parse_gl_dump(gl_file)
+
+            # Overall summary
             st.write(f"**{len(gl_df)} transactions loaded**")
 
+            # Year-by-year breakdown
+            st.markdown("**📅 Breakdown by Year:**")
+            gl_df['Year'] = pd.to_datetime(gl_df['Date'], errors='coerce').dt.year
+            year_summary = gl_df.groupby('Year').agg({
+                'Debit': 'sum',
+                'Credit': 'sum',
+                'Date': 'count'
+            }).rename(columns={'Date': 'Transactions'})
+
+            # Display year summary in columns
+            years = sorted(year_summary.index.dropna().astype(int).tolist())
+            if years:
+                cols = st.columns(min(len(years), 4))  # Max 4 columns
+                for idx, year in enumerate(years):
+                    with cols[idx % 4]:
+                        st.metric(
+                            f"{year}",
+                            f"{int(year_summary.loc[year, 'Transactions'])} txns",
+                            f"Net: ${year_summary.loc[year, 'Debit'] - year_summary.loc[year, 'Credit']:,.0f}"
+                        )
+
             # Show transaction summary
-            with st.expander("📊 View Transactions"):
+            with st.expander("📊 View All Transactions", expanded=False):
                 st.dataframe(gl_df, width='stretch')
 
             # Interactive reconciliation with Claude
@@ -450,7 +473,7 @@ def show_reconciliation_interface(account: str, tb_merged: pd.DataFrame, session
 
                     client = Anthropic(api_key=api_key)
 
-                    prompt = f"""Analyze this account for reconciliation:
+                    prompt = f"""Perform a comprehensive reconciliation analysis for this account:
 
 Account: {account}
 Category: {account_row.get('Category', 'N/A')}
@@ -460,20 +483,40 @@ Balance: Debit ${account_row['Debit']:,.2f} / Credit ${account_row['Credit']:,.2
 GL Transactions:
 {gl_text}
 
-Please provide:
-1. **Reconciliation Memo**: Summary of account activity, key findings, any issues
-2. **Reconciliation Schedule**: Detailed breakdown (by vendor, date, or category as appropriate)
-3. **Recommendations**: Any actions needed
+Provide a comprehensive analysis with the following sections:
 
-Format as:
-MEMO:
-[memo content]
+## SECTION 1: RECONCILIATION MEMO
+- Summary of account activity
+- Key observations and findings
+- Any discrepancies or issues identified
+- Balance validation (does it match expected behavior?)
 
-SCHEDULE:
-[schedule in table format]
+## SECTION 2: RECONCILIATION SCHEDULE
+Detailed breakdown in table format:
+- By vendor/counterparty (if applicable)
+- By date/aging buckets (if applicable)
+- By transaction type (if applicable)
+Show amounts clearly with totals
 
-RECOMMENDATIONS:
-[recommendations]
+## SECTION 3: OUTPUT B - ACCOUNT-LEVEL ANALYSIS
+- Top 5 largest components of this balance
+- Aging analysis (if applicable - group by date ranges)
+- Key risk items or unusual transactions
+- Validation of balance type (should it be debit/credit?)
+- Any red flags or items needing investigation
+
+## SECTION 4: OUTPUT C - EXECUTIVE SUMMARY
+- High-level summary (2-3 sentences for executives)
+- Key findings and concerns
+- Priority recommendations
+- Overall status: **Clean** / **Needs Attention** / **Critical**
+
+## SECTION 5: RECOMMENDATIONS
+- Specific actions needed
+- Priority level for each action
+- Who should handle (if relevant)
+
+Format professionally with clear headers and tables where appropriate.
 """
 
                     response = client.messages.create(
@@ -541,60 +584,10 @@ Transactions: {len(gl_df)}
                         mime="text/plain"
                     )
 
-                # Additional Analysis Sections
+                # GL Chat Interface - Always visible
                 st.markdown("---")
-
-                # Output B & C Style Analysis
-                with st.expander("📊 Detailed Executive Analysis (Output B & C Style)", expanded=False):
-                    if st.button("🤖 Generate Executive Analysis", key=f"btn_exec_analysis_{account}"):
-                        with st.spinner("Generating executive-level analysis..."):
-                            from anthropic import Anthropic
-                            client = Anthropic(api_key=api_key)
-
-                            exec_prompt = f"""Generate an executive-style analysis for this account:
-
-Account: {account}
-Category: {account_row.get('Category', 'N/A')}
-Subcategory: {account_row.get('Subcategory', 'N/A')}
-Balance: Debit ${account_row['Debit']:,.2f} / Credit ${account_row['Credit']:,.2f}
-
-GL Transactions:
-{processor.format_gl_for_claude(gl_df, account)}
-
-Provide:
-
-**OUTPUT B - Account-Level Reconciliation:**
-- Top 5 components of this account balance
-- Aging analysis (if applicable)
-- Key risk items or unusual transactions
-- Validation of balance behavior
-- Any reconciliation issues
-
-**OUTPUT C - Executive Summary for this Account:**
-- High-level summary (2-3 sentences)
-- Key findings and concerns
-- Recommended actions
-- Overall status (Clean / Needs Attention / Critical)
-
-Format with clear headers and professional tone."""
-
-                            response = client.messages.create(
-                                model="claude-sonnet-4-5-20250929",
-                                max_tokens=4096,
-                                messages=[{"role": "user", "content": exec_prompt}]
-                            )
-
-                            exec_analysis = response.content[0].text
-                            st.session_state[f'exec_analysis_{account}'] = exec_analysis
-                            st.rerun()
-
-                    # Show executive analysis if available
-                    if f'exec_analysis_{account}' in st.session_state:
-                        st.markdown(st.session_state[f'exec_analysis_{account}'])
-
-                # GL Chat Interface
-                with st.expander("💬 Chat with GL Data for this Account", expanded=False):
-                    st.markdown(f"Ask questions about the GL transactions for **{account}**")
+                st.markdown("### 💬 Chat with GL Data")
+                st.markdown(f"Ask questions about the GL transactions for **{account}**")
 
                     # Initialize chat history for this account
                     chat_key = f'gl_chat_{account}'
