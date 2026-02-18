@@ -115,25 +115,6 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        # Session Management - Load Previous Session
-        st.markdown("### 📂 Load Previous Session")
-        session_file = st.file_uploader(
-            "Upload saved session file",
-            type=['json'],
-            help="Restore your previous work by uploading a saved session file",
-            key="session_uploader"
-        )
-
-        if session_file:
-            if st.button("🔄 Restore Session", type="primary", width='stretch'):
-                with st.spinner("Restoring session..."):
-                    if session_manager.import_session(session_file):
-                        st.success("✅ Session restored successfully!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to restore session")
-
-        st.markdown("---")
         st.header("📁 File Uploads")
 
         # Category Mapping - Always use default (hidden from users)
