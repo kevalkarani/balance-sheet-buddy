@@ -431,9 +431,13 @@ def extract_summary_stats(classification_text: str, df: pd.DataFrame = None) -> 
 
         if 'Status' in df.columns:
             # Filter out NaN values before counting
-            status_series = df['Status'].dropna().astype(str)
+            status_series = df['Status'].dropna().astype(str).str.strip()
             stats['pass_count'] = len(status_series[status_series.str.upper() == 'PASS'])
             stats['mismatch_count'] = len(status_series[status_series.str.upper() == 'MISMATCH'])
+
+            # Count accounts with other/empty status
+            all_status = df['Status'].fillna('').astype(str).str.strip().str.upper()
+            stats['other_status_count'] = len(df[~all_status.isin(['PASS', 'MISMATCH', ''])])
 
         if 'Category' in df.columns:
             stats['unmapped_count'] = len(df[df['Category'] == 'Unmapped'])
@@ -480,6 +484,8 @@ def create_summary_text(stats: Dict, df: pd.DataFrame = None) -> str:
     pass_pct = (passed/total*100) if total > 0 else 0
     mismatch_pct = (mismatched/total*100) if total > 0 else 0
 
+    other_status = stats.get('other_status_count', 0)
+
     lines = [
         "📊 ANALYSIS SUMMARY",
         "=" * 60,
@@ -488,8 +494,19 @@ def create_summary_text(stats: Dict, df: pd.DataFrame = None) -> str:
         f"✅ PASS: {passed} ({pass_pct:.1f}%)",
         f"❌ MISMATCH: {mismatched} ({mismatch_pct:.1f}%)",
         f"⚠️  Unmapped Accounts: {unmapped}",
-        ""
     ]
+
+    # Show other status count if exists
+    if other_status > 0:
+        lines.append(f"ℹ️  Other Status: {other_status}")
+
+    # Validation check
+    accounted_for = passed + mismatched + other_status
+    if accounted_for != total:
+        missing = total - accounted_for
+        lines.append(f"⚠️  WARNING: {missing} accounts with empty/missing Status")
+
+    lines.append("")
 
     # Add balance totals if available
     if 'total_debit' in stats and 'total_credit' in stats:
