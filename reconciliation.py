@@ -100,7 +100,7 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
     # Summary statistics (exclude P&L and "PL - Ignore" accounts from reconciliation tracking)
     accounts_needing_recon = recon_df[
         (recon_df['Subcategory'] != 'PL') &
-        (recon_df['Category'] != 'PL - Ignore')
+        (recon_df['Subcategory'] != 'PL - Ignore')
     ]
     total_accounts = len(accounts_needing_recon)
     reconciled_count = accounts_needing_recon['Reconciled'].sum()
@@ -118,7 +118,7 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
 
     # Show info about excluded accounts
     pl_count = len(recon_df[recon_df['Subcategory'] == 'PL'])
-    pl_ignore_count = len(recon_df[recon_df['Category'] == 'PL - Ignore'])
+    pl_ignore_count = len(recon_df[recon_df['Subcategory'] == 'PL - Ignore'])
     total_excluded = pl_count + pl_ignore_count
     if total_excluded > 0:
         st.caption(f"ℹ️ {total_excluded} account(s) excluded (PL/PL-Ignore - no reconciliation needed)")
@@ -172,9 +172,8 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
                 st.write(row.get('Subcategory', ''))
             with cols[4]:
                 subcategory = row.get('Subcategory', '')
-                category = row.get('Category', '')
                 # P&L and "PL - Ignore" accounts don't need reconciliation
-                if subcategory == 'PL' or category == 'PL - Ignore':
+                if subcategory == 'PL' or subcategory == 'PL - Ignore':
                     st.info("Not Required")
                 elif row['Reconciled']:
                     st.success("✓ Done")
@@ -182,9 +181,8 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
                     st.warning("⏳ Pending")
             with cols[5]:
                 subcategory = row.get('Subcategory', '')
-                category = row.get('Category', '')
                 # P&L and "PL - Ignore" accounts don't need reconciliation - no button
-                if subcategory == 'PL' or category == 'PL - Ignore':
+                if subcategory == 'PL' or subcategory == 'PL - Ignore':
                     st.write("—")
                 else:
                     if st.button("Reconcile", key=f"recon_{idx}"):
