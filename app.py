@@ -15,6 +15,7 @@ import prompts
 import outputs
 import reconciliation
 import session_manager
+import gl_chat
 
 
 # Page configuration
@@ -89,6 +90,8 @@ def main():
         st.session_state.current_session_id = None
     if 'session_auto_loaded' not in st.session_state:
         st.session_state.session_auto_loaded = False
+    if 'gl_combined' not in st.session_state:
+        st.session_state.gl_combined = None
 
     # Auto-load session from URL if present (only once per page load)
     if not st.session_state.session_auto_loaded:
@@ -411,6 +414,7 @@ def main():
                             if gl_dfs:
                                 # Combine all GL data
                                 gl_combined = pd.concat(gl_dfs, ignore_index=True)
+                                st.session_state.gl_combined = gl_combined  # Store for GL Chat
                                 gl_text = processor.format_gl_for_claude(gl_combined)
                                 st.write(f"✓ Total {len(gl_combined)} transactions loaded")
 
@@ -490,18 +494,37 @@ def main():
             st.markdown("---")
 
             # Output tabs - Always include Account Reconciliation tab
+            # Add GL Chat tab if GL data is available
+            has_gl_data = st.session_state.gl_combined is not None and not st.session_state.gl_combined.empty
+
             if st.session_state.reconciliation_result:
-                tab1, tab2, tab3, tab4 = st.tabs([
-                    "📋 Output A - Classification",
-                    "🔍 Account Reconciliation",
-                    "📊 Output B - Reconciliation",
-                    "📈 Output C - Summary"
-                ])
+                if has_gl_data:
+                    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+                        "📋 Output A - Classification",
+                        "🔍 Account Reconciliation",
+                        "💬 GL Chat",
+                        "📊 Output B - Reconciliation",
+                        "📈 Output C - Summary"
+                    ])
+                else:
+                    tab1, tab2, tab3, tab4 = st.tabs([
+                        "📋 Output A - Classification",
+                        "🔍 Account Reconciliation",
+                        "📊 Output B - Reconciliation",
+                        "📈 Output C - Summary"
+                    ])
             else:
-                tab1, tab2 = st.tabs([
-                    "📋 Output A - Classification",
-                    "🔍 Account Reconciliation"
-                ])
+                if has_gl_data:
+                    tab1, tab2, tab3 = st.tabs([
+                        "📋 Output A - Classification",
+                        "🔍 Account Reconciliation",
+                        "💬 GL Chat"
+                    ])
+                else:
+                    tab1, tab2 = st.tabs([
+                        "📋 Output A - Classification",
+                        "🔍 Account Reconciliation"
+                    ])
 
             with tab1:
                 st.subheader("Classification View")
@@ -570,7 +593,7 @@ def main():
                 with st.expander("📄 View Raw Claude Response"):
                     st.text(st.session_state.classification_result)
 
-            # Tab 2: Account Reconciliation (NEW)
+            # Tab 2: Account Reconciliation
             with tab2:
                 reconciliation.show_reconciliation_tab(
                     st.session_state.classification_df,
@@ -578,13 +601,25 @@ def main():
                     api_key
                 )
 
+            # Tab 3: GL Chat (only if GL data available)
+            if has_gl_data:
+                with tab3:
+                    gl_chat.show_gl_chat_interface(
+                        st.session_state.gl_combined,
+                        api_key
+                    )
+
             if st.session_state.reconciliation_result:
                 # Parse sections
                 sections = st.session_state.reconciliation_result.split("OUTPUT C")
                 output_b = sections[0].replace("OUTPUT B", "").strip()
                 output_c = sections[1].strip() if len(sections) > 1 else ""
 
-                with tab3:  # Changed from tab2 to tab3
+                # Output B and C tabs depend on whether GL Chat tab exists
+                output_b_tab = tab4 if has_gl_data else tab3
+                output_c_tab = tab5 if has_gl_data else tab4
+
+                with output_b_tab:
                     st.subheader("Account-Level Reconciliation")
                     st.markdown(output_b)
 
@@ -598,7 +633,7 @@ def main():
                         key="download_output_b"
                     )
 
-                with tab4:  # Changed from tab3 to tab4
+                with output_c_tab:
                     st.subheader("Executive Summary")
                     st.markdown(output_c)
 
