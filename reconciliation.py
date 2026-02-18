@@ -171,12 +171,193 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
 
     # Show reconciliation interface if account selected
     if st.session_state.get('show_reconciliation_interface', False):
-        show_reconciliation_interface(
-            st.session_state.selected_account,
-            tb_merged,
-            session_id,
-            api_key
-        )
+        # Get selected account info to determine subcategory
+        selected_account = st.session_state.selected_account
+        account_info = tb_merged[tb_merged['Account'].astype(str) == selected_account].iloc[0]
+        subcategory = account_info.get('Subcategory', '')
+
+        # Show appropriate interface based on subcategory
+        if subcategory == 'Banks':
+            show_bank_reconciliation_interface(
+                selected_account,
+                tb_merged,
+                session_id,
+                api_key
+            )
+        else:
+            show_reconciliation_interface(
+                selected_account,
+                tb_merged,
+                session_id,
+                api_key
+            )
+
+
+def show_bank_reconciliation_interface(account: str, tb_merged: pd.DataFrame, session_id: str, api_key: str):
+    """
+    Show bank reconciliation interface - uses screenshot comparison instead of GL dump.
+    """
+    st.markdown("---")
+    st.markdown(f"## 🏦 Bank Reconciliation: {account}")
+
+    # Get account info
+    account_row = tb_merged[tb_merged['Account'].astype(str) == account].iloc[0]
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("GL Balance (Debit)", f"${account_row['Debit']:,.2f}")
+    with col2:
+        st.metric("GL Balance (Credit)", f"${account_row['Credit']:,.2f}")
+    with col3:
+        gl_balance = account_row['Debit'] if account_row['Debit'] > 0 else account_row['Credit']
+        st.metric("Net GL Balance", f"${gl_balance:,.2f}")
+
+    st.info("💡 For bank accounts, upload a screenshot of your bank statement showing the reconciled balance.")
+
+    # Bank statement screenshot upload
+    st.markdown("### 1. Upload Bank Statement Screenshot")
+    bank_screenshot = st.file_uploader(
+        f"Upload bank statement screenshot for {account}",
+        type=['png', 'jpg', 'jpeg', 'pdf'],
+        key=f"bank_screenshot_{account}"
+    )
+
+    if bank_screenshot:
+        st.success("✓ Bank statement uploaded")
+
+        # Display the image
+        if bank_screenshot.type.startswith('image/'):
+            st.image(bank_screenshot, caption="Bank Statement", use_container_width=True)
+
+        st.markdown("### 2. Verify Balance Match")
+
+        if st.button("🤖 Compare with Claude", key=f"compare_bank_{account}"):
+            with st.spinner("Analyzing bank statement..."):
+                from anthropic import Anthropic
+                import base64
+
+                client = Anthropic(api_key=api_key)
+
+                # Read image and encode
+                bank_screenshot.seek(0)
+                image_data = base64.standard_b64encode(bank_screenshot.read()).decode("utf-8")
+
+                # Determine media type
+                media_type = "image/jpeg"
+                if bank_screenshot.type == "image/png":
+                    media_type = "image/png"
+                elif bank_screenshot.type == "application/pdf":
+                    media_type = "application/pdf"
+
+                prompt = f"""Analyze this bank statement screenshot and extract the reconciled balance.
+
+Account: {account}
+GL Balance from our records: ${gl_balance:,.2f}
+
+Please:
+1. Extract the bank balance from the statement
+2. Compare it with our GL balance (${gl_balance:,.2f})
+3. Determine if they match (within $1 tolerance for rounding)
+
+Provide your response in this format:
+
+BANK BALANCE: [amount]
+GL BALANCE: ${gl_balance:,.2f}
+STATUS: [MATCH or MISMATCH]
+DIFFERENCE: [amount if any]
+
+RECONCILIATION NOTES:
+[Brief notes about the reconciliation]
+"""
+
+                response = client.messages.create(
+                    model="claude-sonnet-4-5-20250929",
+                    max_tokens=1024,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": image_data,
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    }]
+                )
+
+                reconciliation_result = response.content[0].text
+
+                # Store in session state
+                st.session_state[f'bank_recon_result_{account}'] = reconciliation_result
+                st.rerun()
+
+        # Show reconciliation results if available
+        if f'bank_recon_result_{account}' in st.session_state:
+            result = st.session_state[f'bank_recon_result_{account}']
+
+            st.markdown("### 3. Reconciliation Results")
+
+            # Parse result to show status prominently
+            if "STATUS: MATCH" in result.upper():
+                st.success("✅ **BALANCE MATCHES** - Bank statement matches GL balance!")
+            elif "STATUS: MISMATCH" in result.upper():
+                st.error("❌ **BALANCE MISMATCH** - Bank statement does not match GL balance")
+            else:
+                st.warning("⚠️ **REVIEW REQUIRED** - Please review the results below")
+
+            st.markdown(result)
+
+            # Save reconciliation
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✓ Mark as Reconciled", key=f"mark_done_bank_{account}"):
+                    # Save reconciliation state
+                    if account not in st.session_state.reconciliation_state:
+                        st.session_state.reconciliation_state[account] = {}
+
+                    st.session_state.reconciliation_state[account] = {
+                        'reconciled': True,
+                        'timestamp': datetime.now().isoformat(),
+                        'memo': result,
+                        'type': 'bank_screenshot'
+                    }
+
+                    # Save to file
+                    save_reconciliation_state(session_id, st.session_state.reconciliation_state)
+
+                    st.success(f"✓ {account} marked as reconciled!")
+                    st.session_state.show_reconciliation_interface = False
+                    st.rerun()
+
+            with col2:
+                # Download reconciliation report
+                report_data = f"""Bank Reconciliation Report
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Account: {account}
+Category: Bank
+GL Balance: ${gl_balance:,.2f}
+
+{result}
+"""
+                st.download_button(
+                    "📥 Download Report",
+                    data=report_data,
+                    file_name=f"Bank_Reconciliation_{account.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain"
+                )
+
+    # Close button
+    if st.button("← Back to Account List"):
+        st.session_state.show_reconciliation_interface = False
+        st.rerun()
 
 
 def show_reconciliation_interface(account: str, tb_merged: pd.DataFrame, session_id: str, api_key: str):
