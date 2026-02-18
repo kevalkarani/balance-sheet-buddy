@@ -245,12 +245,50 @@ def parse_gl_dump(file) -> pd.DataFrame:
     Parse GL dump file (Excel or CSV).
     Expected columns: Account, Date, Description/Memo, Debit, Credit
     Returns DataFrame with transaction details.
+    Handles files with title rows and inconsistent column counts.
     """
     try:
         if file.name.endswith('.xlsx') or file.name.endswith('.xls'):
-            df = pd.read_excel(file)
+            # Excel - read first 20 rows to find headers
+            df_raw = pd.read_excel(file, header=None, nrows=20)
+
+            # Find the row that contains column headers
+            header_row = None
+            for idx, row in df_raw.iterrows():
+                row_str = ' '.join([str(x).lower() for x in row if pd.notna(x)])
+                # Look for common GL dump column names
+                if any(keyword in row_str for keyword in ['account', 'date', 'debit', 'credit', 'transaction']):
+                    if 'debit' in row_str and 'credit' in row_str:
+                        header_row = idx
+                        break
+
+            if header_row is None:
+                # If not found, assume header is in first row
+                header_row = 0
+
+            # Now read the file with the correct header row
+            df = pd.read_excel(file, header=header_row)
         else:
-            df = pd.read_csv(file)
+            # CSV - read as text to find header row, then parse properly
+            file.seek(0)
+            lines = file.read().decode('utf-8', errors='ignore').split('\n')
+
+            header_row = None
+            for idx, line in enumerate(lines[:20]):  # Check first 20 lines
+                line_lower = line.lower()
+                # Look for common GL dump column names
+                if any(keyword in line_lower for keyword in ['account', 'date', 'debit', 'credit', 'transaction']):
+                    if 'debit' in line_lower and 'credit' in line_lower:
+                        header_row = idx
+                        break
+
+            if header_row is None:
+                # If not found, assume header is in first row
+                header_row = 0
+
+            # Read CSV starting from header row
+            file.seek(0)
+            df = pd.read_csv(file, skiprows=header_row)
 
         df.columns = df.columns.str.strip()
 
@@ -279,12 +317,24 @@ def parse_gl_dump(file) -> pd.DataFrame:
         if missing:
             raise ValueError(f"GL dump missing required columns: {missing}")
 
+        # Helper function to clean and convert currency values
+        def clean_currency(value):
+            """Remove currency symbols, commas, and convert to float."""
+            if pd.isna(value) or value == '':
+                return 0.0
+            # Convert to string and remove currency symbols (€, $, £, etc.) and commas
+            value_str = str(value).replace('€', '').replace('$', '').replace('£', '').replace(',', '').strip()
+            try:
+                return float(value_str) if value_str else 0.0
+            except ValueError:
+                return 0.0
+
         result = pd.DataFrame({
             'Account': df[account_col],
             'Date': pd.to_datetime(df[date_col], errors='coerce'),
             'Description': df[desc_col] if desc_col else '',
-            'Debit': pd.to_numeric(df[debit_col], errors='coerce').fillna(0),
-            'Credit': pd.to_numeric(df[credit_col], errors='coerce').fillna(0)
+            'Debit': df[debit_col].apply(clean_currency),
+            'Credit': df[credit_col].apply(clean_currency)
         })
 
         return result
