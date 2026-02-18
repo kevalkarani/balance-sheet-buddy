@@ -172,6 +172,23 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
 
     # Show reconciliation interface if account selected
     if st.session_state.get('show_reconciliation_interface', False):
+        # Add anchor for scrolling
+        st.markdown('<div id="reconciliation-section"></div>', unsafe_allow_html=True)
+
+        # Use st.components to inject JavaScript for scrolling
+        import streamlit.components.v1 as components
+        components.html("""
+        <script>
+            // Scroll to reconciliation section
+            setTimeout(function() {
+                window.parent.document.getElementById('reconciliation-section').scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }, 100);
+        </script>
+        """, height=0)
+
         # Get selected account info to determine subcategory
         selected_account = st.session_state.selected_account
         account_info = tb_merged[tb_merged['Account'].astype(str) == selected_account].iloc[0]
