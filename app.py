@@ -85,6 +85,24 @@ def main():
         st.session_state.reconciliation_result = None
     if 'tb_merged' not in st.session_state:
         st.session_state.tb_merged = None
+    if 'current_session_id' not in st.session_state:
+        st.session_state.current_session_id = None
+    if 'session_auto_loaded' not in st.session_state:
+        st.session_state.session_auto_loaded = False
+
+    # Auto-load session from URL if present (only once per page load)
+    if not st.session_state.session_auto_loaded:
+        session_id = session_manager.get_session_id_from_url()
+        if session_id and not st.session_state.analysis_complete:
+            if session_manager.auto_load_session(session_id):
+                st.session_state.current_session_id = session_id
+                st.session_state.session_auto_loaded = True
+                st.success(f"✅ Session restored automatically!")
+                st.rerun()
+        st.session_state.session_auto_loaded = True
+
+    # Cleanup old sessions (run once on app load)
+    session_manager.cleanup_old_sessions(days=7)
 
     # Header
     st.title("📊 Balance Sheet Buddy")
@@ -430,6 +448,13 @@ def main():
                     st.session_state.reconciliation_result = reconciliation_result
                     st.session_state.tb_merged = tb_merged
 
+                    # Auto-save session to server
+                    with st.spinner("💾 Auto-saving your session..."):
+                        session_id = session_manager.auto_save_session(st.session_state.current_session_id)
+                        st.session_state.current_session_id = session_id
+                        session_manager.set_session_id_in_url(session_id)
+                        st.success("✅ Session auto-saved! You can bookmark this URL to return to your work.")
+
                 except Exception as e:
                     st.error(f"❌ Error during analysis: {str(e)}")
                     st.exception(e)
@@ -443,16 +468,20 @@ def main():
             with col1:
                 st.header("📊 Analysis Results")
             with col2:
-                # Save Session button
+                # Save Session button (for manual backup)
                 session_bytes = session_manager.export_session()
                 st.download_button(
-                    label="💾 Save Session",
+                    label="📥 Download Backup",
                     data=session_bytes,
                     file_name=f"BSBuddy_Session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                     mime="application/json",
                     width='stretch',
-                    help="Save your work to continue later"
+                    help="Download a backup copy of your session (auto-save is already active)"
                 )
+
+            # Show auto-save status
+            if st.session_state.current_session_id:
+                st.info(f"🔄 Auto-save active • Session ID: `{st.session_state.current_session_id}` • Bookmark this page to return to your work anytime!")
 
             # Summary stats - pass classification DataFrame which has Status column
             stats = outputs.extract_summary_stats(

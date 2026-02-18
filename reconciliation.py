@@ -10,6 +10,7 @@ import os
 from datetime import datetime
 from typing import Dict, Optional
 import io
+import session_manager
 
 
 def load_reconciliation_state(session_id: str) -> Dict:
@@ -332,6 +333,10 @@ RECONCILIATION NOTES:
                     # Save to file
                     save_reconciliation_state(session_id, st.session_state.reconciliation_state)
 
+                    # Auto-save session
+                    if st.session_state.current_session_id:
+                        session_manager.auto_save_session(st.session_state.current_session_id)
+
                     st.success(f"✓ {account} marked as reconciled!")
                     st.session_state.show_reconciliation_interface = False
                     st.rerun()
@@ -475,6 +480,10 @@ RECOMMENDATIONS:
 
                         # Save to file
                         save_reconciliation_state(session_id, st.session_state.reconciliation_state)
+
+                        # Auto-save session
+                        if st.session_state.current_session_id:
+                            session_manager.auto_save_session(st.session_state.current_session_id)
 
                         st.success(f"✓ {account} marked as reconciled!")
                         st.session_state.show_reconciliation_interface = False

@@ -46,6 +46,7 @@ Thumbs.db
 
 # Session data files
 .reconciliation_state_*.json
+.sessions/
 
 # Uploaded files (if you want to exclude test data)
 # test_*.xlsx
