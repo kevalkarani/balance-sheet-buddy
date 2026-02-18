@@ -37,8 +37,13 @@ def parse_trial_balance(file) -> pd.DataFrame:
             # Now read the file with the correct header row
             df = pd.read_excel(file, header=header_row)
         else:
-            # CSV - try to find header row
-            df_raw = pd.read_csv(file, header=None, nrows=20)
+            # CSV - try to find header row (handle files with inconsistent column counts)
+            try:
+                # Try newer pandas parameter
+                df_raw = pd.read_csv(file, header=None, nrows=20, on_bad_lines='skip')
+            except TypeError:
+                # Fallback for older pandas versions
+                df_raw = pd.read_csv(file, header=None, nrows=20, error_bad_lines=False, warn_bad_lines=False)
 
             header_row = None
             for idx, row in df_raw.iterrows():
@@ -50,7 +55,12 @@ def parse_trial_balance(file) -> pd.DataFrame:
             if header_row is None:
                 raise ValueError("Could not find header row with Account, Debit, Credit columns")
 
-            df = pd.read_csv(file, header=header_row)
+            # Read again with correct header row, skipping bad lines
+            file.seek(0)  # Reset file pointer
+            try:
+                df = pd.read_csv(file, header=header_row, on_bad_lines='skip')
+            except TypeError:
+                df = pd.read_csv(file, header=header_row, error_bad_lines=False, warn_bad_lines=False)
 
         # Standardize column names (case-insensitive matching)
         df.columns = df.columns.str.strip()
@@ -72,11 +82,23 @@ def parse_trial_balance(file) -> pd.DataFrame:
         if not all([account_col, debit_col, credit_col]):
             raise ValueError(f"Could not find required columns. Found columns: {list(df.columns)}")
 
-        # Create standardized DataFrame
+        # Helper function to clean and convert currency values
+        def clean_currency(value):
+            """Remove currency symbols, commas, and convert to float."""
+            if pd.isna(value) or value == '':
+                return 0.0
+            # Convert to string and remove currency symbols (€, $, £, etc.) and commas
+            value_str = str(value).replace('€', '').replace('$', '').replace('£', '').replace(',', '').strip()
+            try:
+                return float(value_str) if value_str else 0.0
+            except ValueError:
+                return 0.0
+
+        # Create standardized DataFrame with cleaned currency values
         result = pd.DataFrame({
             'Account': df[account_col],
-            'Debit': pd.to_numeric(df[debit_col], errors='coerce').fillna(0),
-            'Credit': pd.to_numeric(df[credit_col], errors='coerce').fillna(0)
+            'Debit': df[debit_col].apply(clean_currency),
+            'Credit': df[credit_col].apply(clean_currency)
         })
 
         return result
