@@ -98,9 +98,9 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
     )
 
     # Summary statistics (exclude P&L and "PL - Ignore" accounts from reconciliation tracking)
+    # Use case-insensitive check for "ignore" in subcategory
     accounts_needing_recon = recon_df[
-        (recon_df['Subcategory'] != 'PL') &
-        (recon_df['Subcategory'] != 'PL - Ignore')
+        ~recon_df['Subcategory'].astype(str).str.lower().str.contains('ignore|^pl$', na=False)
     ]
     total_accounts = len(accounts_needing_recon)
     reconciled_count = accounts_needing_recon['Reconciled'].sum()
@@ -117,9 +117,7 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
     st.progress(progress_pct / 100)
 
     # Show info about excluded accounts
-    pl_count = len(recon_df[recon_df['Subcategory'] == 'PL'])
-    pl_ignore_count = len(recon_df[recon_df['Subcategory'] == 'PL - Ignore'])
-    total_excluded = pl_count + pl_ignore_count
+    total_excluded = len(recon_df) - len(accounts_needing_recon)
     if total_excluded > 0:
         st.caption(f"ℹ️ {total_excluded} account(s) excluded (PL/PL-Ignore - no reconciliation needed)")
 
@@ -171,18 +169,20 @@ def show_reconciliation_tab(classification_df: pd.DataFrame, tb_merged: pd.DataF
             with cols[3]:
                 st.write(row.get('Subcategory', ''))
             with cols[4]:
-                subcategory = row.get('Subcategory', '')
+                subcategory = str(row.get('Subcategory', '')).strip()
                 # P&L and "PL - Ignore" accounts don't need reconciliation
-                if subcategory == 'PL' or subcategory == 'PL - Ignore':
+                # Check with case-insensitive and stripped comparison
+                if subcategory == 'PL' or 'ignore' in subcategory.lower():
                     st.info("Not Required")
                 elif row['Reconciled']:
                     st.success("✓ Done")
                 else:
                     st.warning("⏳ Pending")
             with cols[5]:
-                subcategory = row.get('Subcategory', '')
+                subcategory = str(row.get('Subcategory', '')).strip()
                 # P&L and "PL - Ignore" accounts don't need reconciliation - no button
-                if subcategory == 'PL' or subcategory == 'PL - Ignore':
+                # Check with case-insensitive and stripped comparison
+                if subcategory == 'PL' or 'ignore' in subcategory.lower():
                     st.write("—")
                 else:
                     if st.button("Reconcile", key=f"recon_{idx}"):
