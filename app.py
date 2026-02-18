@@ -13,6 +13,7 @@ from datetime import datetime
 import processor
 import prompts
 import outputs
+import reconciliation
 
 
 # Page configuration
@@ -433,11 +434,19 @@ def main():
 
             st.markdown("---")
 
-            # Output tabs
+            # Output tabs - Always include Account Reconciliation tab
             if st.session_state.reconciliation_result:
-                tab1, tab2, tab3 = st.tabs(["📋 Output A - Classification", "📊 Output B - Reconciliation", "📈 Output C - Summary"])
+                tab1, tab2, tab3, tab4 = st.tabs([
+                    "📋 Output A - Classification",
+                    "🔍 Account Reconciliation",
+                    "📊 Output B - Reconciliation",
+                    "📈 Output C - Summary"
+                ])
             else:
-                tab1, = st.tabs(["📋 Output A - Classification"])
+                tab1, tab2 = st.tabs([
+                    "📋 Output A - Classification",
+                    "🔍 Account Reconciliation"
+                ])
 
             with tab1:
                 st.subheader("Classification View")
@@ -506,13 +515,21 @@ def main():
                 with st.expander("📄 View Raw Claude Response"):
                     st.text(st.session_state.classification_result)
 
+            # Tab 2: Account Reconciliation (NEW)
+            with tab2:
+                reconciliation.show_reconciliation_tab(
+                    st.session_state.classification_df,
+                    st.session_state.tb_merged,
+                    api_key
+                )
+
             if st.session_state.reconciliation_result:
                 # Parse sections
                 sections = st.session_state.reconciliation_result.split("OUTPUT C")
                 output_b = sections[0].replace("OUTPUT B", "").strip()
                 output_c = sections[1].strip() if len(sections) > 1 else ""
 
-                with tab2:
+                with tab3:  # Changed from tab2 to tab3
                     st.subheader("Account-Level Reconciliation")
                     st.markdown(output_b)
 
@@ -526,7 +543,7 @@ def main():
                         key="download_output_b"
                     )
 
-                with tab3:
+                with tab4:  # Changed from tab3 to tab4
                     st.subheader("Executive Summary")
                     st.markdown(output_c)
 
