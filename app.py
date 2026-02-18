@@ -92,17 +92,24 @@ def main():
 
     # Auto-load session from URL if present (only once per page load)
     if not st.session_state.session_auto_loaded:
-        session_id = session_manager.get_session_id_from_url()
-        if session_id and not st.session_state.analysis_complete:
-            if session_manager.auto_load_session(session_id):
-                st.session_state.current_session_id = session_id
-                st.session_state.session_auto_loaded = True
-                st.success(f"✅ Session restored automatically!")
-                st.rerun()
+        try:
+            session_id = session_manager.get_session_id_from_url()
+            if session_id and not st.session_state.analysis_complete:
+                if session_manager.auto_load_session(session_id):
+                    st.session_state.current_session_id = session_id
+                    st.session_state.session_auto_loaded = True
+                    st.success(f"✅ Session restored automatically!")
+                    st.rerun()
+        except Exception as e:
+            # Silently fail if query params not supported or other error
+            pass
         st.session_state.session_auto_loaded = True
 
     # Cleanup old sessions (run once on app load)
-    session_manager.cleanup_old_sessions(days=7)
+    try:
+        session_manager.cleanup_old_sessions(days=7)
+    except Exception:
+        pass  # Silently fail if cleanup fails
 
     # Header
     st.title("📊 Balance Sheet Buddy")
@@ -433,8 +440,11 @@ def main():
                     with st.spinner("💾 Auto-saving your session..."):
                         session_id = session_manager.auto_save_session(st.session_state.current_session_id)
                         st.session_state.current_session_id = session_id
-                        session_manager.set_session_id_in_url(session_id)
-                        st.success("✅ Session auto-saved! You can bookmark this URL to return to your work.")
+                        try:
+                            session_manager.set_session_id_in_url(session_id)
+                            st.success("✅ Session auto-saved! You can bookmark this URL to return to your work.")
+                        except Exception:
+                            st.success("✅ Session auto-saved!")
 
                 except Exception as e:
                     st.error(f"❌ Error during analysis: {str(e)}")

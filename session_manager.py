@@ -294,7 +294,13 @@ def get_session_id_from_url() -> Optional[str]:
     """
     try:
         query_params = st.query_params
-        return query_params.get('session_id', None)
+        # Handle both dict-like access and attribute access
+        if hasattr(query_params, 'get'):
+            return query_params.get('session_id', None)
+        elif 'session_id' in query_params:
+            return query_params['session_id']
+        else:
+            return None
     except Exception:
         return None
 
