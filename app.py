@@ -148,30 +148,8 @@ def main():
 
         st.markdown("---")
 
-        # GL Dump
-        st.subheader("2. GL Dump (Optional)")
-        gl_files = st.file_uploader(
-            "Upload GL dump file(s)",
-            type=['xlsx', 'xls', 'csv'],
-            accept_multiple_files=True,
-            help="General Ledger transaction details for detailed analysis (Output B & C)"
-        )
-
-        st.markdown("---")
-
-        # Analysis options
-        st.subheader("⚙️ Analysis Options")
-        analysis_type = st.radio(
-            "Select analysis type:",
-            ["Classification Only (Output A)", "Full Analysis (Outputs A, B, C)"],
-            help="Classification provides validation status. Full analysis includes detailed reconciliation."
-        )
-
-        show_mismatches_only = st.checkbox(
-            "Show mismatches only",
-            value=False,
-            help="If checked, Output A will only show accounts with MISMATCH status"
-        )
+        # Info about reconciliation
+        st.info("💡 **GL files** are uploaded per account in the **Account Reconciliation** tab")
 
     # Main content area
     # Debug: Show file status
@@ -301,10 +279,7 @@ def main():
 
                     # Step 4: Call Claude for Output A
                     with st.status("🧠 Analyzing with Claude AI (Output A)...", expanded=True) as status:
-                        if show_mismatches_only:
-                            prompt = prompts.generate_mismatch_only_prompt(tb_text)
-                        else:
-                            prompt = prompts.generate_output_a_prompt(tb_text)
+                        prompt = prompts.generate_output_a_prompt(tb_text)
 
                         # Calculate max_tokens based on account count (roughly 100 tokens per account + overhead)
                         estimated_tokens = max(16384, len(tb_merged) * 100 + 2000)
@@ -403,52 +378,11 @@ def main():
                         st.write("✓ Excel file created")
                         status.update(label="✓ Classification parsed", state="complete")
 
-                    # Step 6: Process GL files if provided (for GL Chat and Full Analysis)
-                    if gl_files:
-                        with st.status("📂 Loading GL data...", expanded=True) as status:
-                            gl_dfs = []
-                            for gl_file in gl_files:
-                                try:
-                                    gl_df = processor.parse_gl_dump(gl_file)
-                                    gl_dfs.append(gl_df)
-                                    st.write(f"✓ Loaded {len(gl_df)} transactions from {gl_file.name}")
-                                except Exception as e:
-                                    st.warning(f"⚠️ Could not parse {gl_file.name}: {str(e)}")
-
-                            if gl_dfs:
-                                # Combine all GL data and store for GL Chat
-                                gl_combined = pd.concat(gl_dfs, ignore_index=True)
-                                st.session_state.gl_combined = gl_combined
-                                st.write(f"✓ Total {len(gl_combined)} transactions loaded for GL Chat")
-                                status.update(label="✓ GL data loaded", state="complete")
-                            else:
-                                st.warning("No GL data could be parsed")
-                                status.update(label="⚠️ GL parsing failed", state="error")
-
-                    # Step 7: If full analysis requested, generate Outputs B & C
-                    reconciliation_result = None
-                    if analysis_type == "Full Analysis (Outputs A, B, C)" and st.session_state.gl_combined is not None:
-                        with st.status("🧠 Performing detailed reconciliation (Outputs B & C)...", expanded=True) as status:
-                            # Use already-loaded GL data
-                            gl_text = processor.format_gl_for_claude(st.session_state.gl_combined)
-
-                            # Call Claude for Outputs B & C
-                            bc_prompt = prompts.generate_output_bc_prompt(tb_text, gl_text)
-                            reconciliation_result = call_claude(bc_prompt, api_key)
-
-                            if reconciliation_result:
-                                st.write("✓ Detailed reconciliation complete")
-                                status.update(label="✓ Outputs B & C generated", state="complete")
-
-                    elif analysis_type == "Full Analysis (Outputs A, B, C)" and not gl_files:
-                        st.warning("⚠️ Full analysis requires GL dump files. Upload GL files in the sidebar.")
-
                     # Store results in session state
                     st.session_state.analysis_complete = True
                     st.session_state.classification_result = classification_result
                     st.session_state.classification_df = classification_df
                     st.session_state.excel_output = excel_output
-                    st.session_state.reconciliation_result = reconciliation_result
                     st.session_state.tb_merged = tb_merged
 
                     # Auto-save session to server
@@ -504,38 +438,11 @@ def main():
 
             st.markdown("---")
 
-            # Output tabs - Always include Account Reconciliation tab
-            # Add GL Chat tab if GL data is available
-            has_gl_data = st.session_state.gl_combined is not None and not st.session_state.gl_combined.empty
-
-            if st.session_state.reconciliation_result:
-                if has_gl_data:
-                    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-                        "📋 Output A - Classification",
-                        "🔍 Account Reconciliation",
-                        "💬 GL Chat",
-                        "📊 Output B - Reconciliation",
-                        "📈 Output C - Summary"
-                    ])
-                else:
-                    tab1, tab2, tab3, tab4 = st.tabs([
-                        "📋 Output A - Classification",
-                        "🔍 Account Reconciliation",
-                        "📊 Output B - Reconciliation",
-                        "📈 Output C - Summary"
-                    ])
-            else:
-                if has_gl_data:
-                    tab1, tab2, tab3 = st.tabs([
-                        "📋 Output A - Classification",
-                        "🔍 Account Reconciliation",
-                        "💬 GL Chat"
-                    ])
-                else:
-                    tab1, tab2 = st.tabs([
-                        "📋 Output A - Classification",
-                        "🔍 Account Reconciliation"
-                    ])
+            # Output tabs - Only Classification and Account Reconciliation
+            tab1, tab2 = st.tabs([
+                "📋 Output A - Classification",
+                "🔍 Account Reconciliation"
+            ])
 
             with tab1:
                 st.subheader("Classification View")
@@ -612,69 +519,7 @@ def main():
                     api_key
                 )
 
-            # Tab 3: GL Chat (only if GL data available)
-            if has_gl_data:
-                with tab3:
-                    gl_chat.show_gl_chat_interface(
-                        st.session_state.gl_combined,
-                        api_key
-                    )
-
-            if st.session_state.reconciliation_result:
-                # Parse sections
-                sections = st.session_state.reconciliation_result.split("OUTPUT C")
-                output_b = sections[0].replace("OUTPUT B", "").strip()
-                output_c = sections[1].strip() if len(sections) > 1 else ""
-
-                # Output B and C tabs depend on whether GL Chat tab exists
-                output_b_tab = tab4 if has_gl_data else tab3
-                output_c_tab = tab5 if has_gl_data else tab4
-
-                with output_b_tab:
-                    st.subheader("Account-Level Reconciliation")
-                    st.markdown(output_b)
-
-                    # Download button
-                    st.download_button(
-                        label="⬇️ Download Output B (Text)",
-                        data=output_b,
-                        file_name=f"Account_Reconciliation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                        mime="text/plain",
-                        width='stretch',
-                        key="download_output_b"
-                    )
-
-                with output_c_tab:
-                    st.subheader("Executive Summary")
-                    st.markdown(output_c)
-
-                    # Download button
-                    st.download_button(
-                        label="⬇️ Download Output C (Text)",
-                        data=output_c,
-                        file_name=f"Executive_Summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                        mime="text/plain",
-                        width='stretch',
-                        key="download_output_c"
-                    )
-
-                # Combined report download
-                st.markdown("---")
-                combined_html = outputs.create_combined_report(
-                    st.session_state.classification_result,
-                    output_b,
-                    output_c
-                )
-                st.download_button(
-                    label="⬇️ Download Complete Report (HTML)",
-                    data=combined_html,
-                    file_name=f"Balance_Sheet_Complete_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
-                    mime="text/html",
-                    width='stretch',
-                    key="download_complete"
-                )
-
-            st.success("✅ Analysis complete!")
+            st.success("✅ Classification complete! Go to Account Reconciliation tab for detailed analysis.")
 
     # Footer
     st.markdown("---")

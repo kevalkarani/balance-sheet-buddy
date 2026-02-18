@@ -509,6 +509,127 @@ Transactions: {len(gl_df)}
                         mime="text/plain"
                     )
 
+                # Additional Analysis Sections
+                st.markdown("---")
+
+                # Output B & C Style Analysis
+                with st.expander("📊 Detailed Executive Analysis (Output B & C Style)", expanded=False):
+                    if st.button("🤖 Generate Executive Analysis", key=f"exec_analysis_{account}"):
+                        with st.spinner("Generating executive-level analysis..."):
+                            from anthropic import Anthropic
+                            client = Anthropic(api_key=api_key)
+
+                            exec_prompt = f"""Generate an executive-style analysis for this account:
+
+Account: {account}
+Category: {account_row.get('Category', 'N/A')}
+Subcategory: {account_row.get('Subcategory', 'N/A')}
+Balance: Debit ${account_row['Debit']:,.2f} / Credit ${account_row['Credit']:,.2f}
+
+GL Transactions:
+{processor.format_gl_for_claude(gl_df, account)}
+
+Provide:
+
+**OUTPUT B - Account-Level Reconciliation:**
+- Top 5 components of this account balance
+- Aging analysis (if applicable)
+- Key risk items or unusual transactions
+- Validation of balance behavior
+- Any reconciliation issues
+
+**OUTPUT C - Executive Summary for this Account:**
+- High-level summary (2-3 sentences)
+- Key findings and concerns
+- Recommended actions
+- Overall status (Clean / Needs Attention / Critical)
+
+Format with clear headers and professional tone."""
+
+                            response = client.messages.create(
+                                model="claude-sonnet-4-5-20250929",
+                                max_tokens=4096,
+                                messages=[{"role": "user", "content": exec_prompt}]
+                            )
+
+                            exec_analysis = response.content[0].text
+                            st.session_state[f'exec_analysis_{account}'] = exec_analysis
+                            st.rerun()
+
+                    # Show executive analysis if available
+                    if f'exec_analysis_{account}' in st.session_state:
+                        st.markdown(st.session_state[f'exec_analysis_{account}'])
+
+                # GL Chat Interface
+                with st.expander("💬 Chat with GL Data for this Account", expanded=False):
+                    st.markdown(f"Ask questions about the GL transactions for **{account}**")
+
+                    # Initialize chat history for this account
+                    chat_key = f'gl_chat_{account}'
+                    if chat_key not in st.session_state:
+                        st.session_state[chat_key] = []
+
+                    # Display chat history
+                    for message in st.session_state[chat_key]:
+                        with st.chat_message(message["role"]):
+                            st.markdown(message["content"])
+
+                    # Chat input
+                    user_input = st.chat_input(f"Ask about {account} transactions...", key=f"chat_input_{account}")
+
+                    if user_input:
+                        # Add user message
+                        st.session_state[chat_key].append({
+                            "role": "user",
+                            "content": user_input
+                        })
+
+                        # Get GL context
+                        gl_context = processor.format_gl_for_claude(gl_df, account)
+
+                        # Build messages for Claude
+                        from anthropic import Anthropic
+                        client = Anthropic(api_key=api_key)
+
+                        system_prompt = f"""You are a financial analysis assistant. You have access to GL transaction data for account {account}.
+
+Account Details:
+- Account: {account}
+- Category: {account_row.get('Category', 'N/A')}
+- Subcategory: {account_row.get('Subcategory', 'N/A')}
+- Balance: Debit ${account_row['Debit']:,.2f} / Credit ${account_row['Credit']:,.2f}
+
+GL Transactions:
+{gl_context}
+
+Answer questions about these transactions clearly and concisely. Use actual data to support your answers."""
+
+                        # Prepare messages
+                        api_messages = []
+                        for msg in st.session_state[chat_key]:
+                            api_messages.append({
+                                "role": msg["role"],
+                                "content": msg["content"]
+                            })
+
+                        # Get response
+                        response = client.messages.create(
+                            model="claude-sonnet-4-5-20250929",
+                            max_tokens=2048,
+                            system=system_prompt,
+                            messages=api_messages
+                        )
+
+                        assistant_response = response.content[0].text
+
+                        # Add assistant response
+                        st.session_state[chat_key].append({
+                            "role": "assistant",
+                            "content": assistant_response
+                        })
+
+                        st.rerun()
+
         except Exception as e:
             st.error(f"Error parsing GL dump: {str(e)}")
 
